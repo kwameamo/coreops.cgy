@@ -615,11 +615,26 @@ function CGYContractManager({ userId = "" }) {
   const inputCls = "w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition";
   const labelCls = "block text-sm font-medium mb-2 text-gray-700";
 
+  const contractStyles = `
+    @keyframes slide-down { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
+    .animate-slide-down { animation: slide-down 0.3s ease-out; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spin { animation: spin 1s linear infinite; }
+    @media (max-width: 768px) {
+      input, select, button, textarea { font-size: 16px !important; }
+      input[type="date"], input[type="datetime-local"], input[type="time"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; -moz-appearance: textfield !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
+      input[type="date"]::-webkit-calendar-picker-indicator, input[type="datetime-local"]::-webkit-calendar-picker-indicator { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E"); background-size: 16px 16px; background-repeat: no-repeat; background-position: right 0.75rem center; cursor: pointer; width: 20px; height: 20px; padding: 0; margin: 0; opacity: 1; }
+      select { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; color: #111827 !important; }
+      select::-ms-expand { display: none; }
+    }
+  `;
+
   /* ─────────────── EDITOR ─────────────── */
   if (editing) {
     const typeInfo = CONTRACT_TYPES[editing.type];
     return (
       <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
+        <style>{contractStyles}</style>
         {notification.show && (
           <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4 animate-slide-down">
             <div className={`rounded-lg shadow-lg p-4 flex items-start gap-3 ${notification.type === "success" ? "bg-green-50 border border-green-200" : notification.type === "error" ? "bg-red-50 border border-red-200" : "bg-blue-50 border border-blue-200"}`}>
@@ -659,7 +674,7 @@ function CGYContractManager({ userId = "" }) {
                   <input type="text" value={editing.contractNumber} onChange={set("contractNumber")} className={inputCls} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Contract Date</label>
+                  <label className={labelCls}>Contract Date</label>
                   <input type="date" value={editing.contractDate} onChange={set("contractDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
@@ -669,15 +684,15 @@ function CGYContractManager({ userId = "" }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Start Date</label>
+                  <label className={labelCls}>Start Date</label>
                   <input type="date" value={editing.startDate} onChange={set("startDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Estimated End Date</label>
+                  <label className={labelCls}>Estimated End Date</label>
                   <input type="date" value={editing.endDate} onChange={set("endDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Currency</label>
+                  <label className={labelCls}>Currency</label>
                   <select value={editing.currency} onChange={set("currency")} className={inputCls}>
                     <option value="GHS">GHS — Ghanaian Cedis</option>
                     <option value="USD">USD — US Dollars</option>
@@ -1048,17 +1063,7 @@ function CGYContractManager({ userId = "" }) {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
-      <style>{`
-        @keyframes slide-down { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
-        .animate-slide-down { animation: slide-down 0.3s ease-out; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .spin { animation: spin 1s linear infinite; }
-        @media (max-width: 768px) {
-          input, select, button, textarea { font-size: 16px !important; }
-          input[type="date"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
-          select { -webkit-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; }
-        }
-      `}</style>
+      <style>{contractStyles}</style>
 
       {/* Notification */}
       {notification.show && (
