@@ -1,4 +1,10 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
+import { db } from "./firebase";
+import {
+  collection, doc, setDoc, deleteDoc,
+  getDocs, query, where, orderBy,
+  getDoc, updateDoc
+} from "firebase/firestore";
 import {
   Plus, Trash2, Download, FileText, Edit2, X,
   CheckCircle, AlertCircle, Info, Search,
@@ -147,8 +153,8 @@ const generateContractPDF = async (contract) => {
 
     const [base64Logo, base64Sign] = await Promise.all([getBase64Logo(), getBase64Sign()]);
 
-  const win = window.open("", "_blank");
-  win.document.write(`<!DOCTYPE html>
+  /* ── Mobile-safe: build HTML blob and trigger download/print ── */
+  const htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -431,21 +437,36 @@ const generateContractPDF = async (contract) => {
   </div>
 </div>
 <script>window.onload = function() { window.print(); }</script>
-</body></html>`);
-  win.document.close();
+</body></html>`;
+
+  /* Try popup first (desktop); fall back to blob URL (mobile) */
+  const win = window.open("", "_blank");
+  if (win && !win.closed) {
+    win.document.write(htmlContent);
+    win.document.close();
+  } else {
+    /* Mobile fallback: open blob URL in same tab or trigger download */
+    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.target = "_blank";
+    a.rel = "noopener noreferrer";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
 };
 
 /* ─────────────────────────────────────────────
    MAIN COMPONENT
 ───────────────────────────────────────────── */
-export default function CGYContractManager() {
+export default function CGYContractManager({ userId = "" }) {
   const [currentView, setCurrentView] = useState("create");
-  const [contracts, setContracts] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("cgy_contracts") || "[]"); } catch { return []; }
-  });
-  const [counter, setCounter] = useState(() => {
-    try { return parseInt(localStorage.getItem("cgy_contract_counter") || "1"); } catch { return 1; }
-  });
+  const [contracts, setContracts] = useState([]);
+  const [counter, setCounter] = useState(1);
+  const [isLoadingContracts, setIsLoadingContracts] = useState(false);
   const [editing, setEditing] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: "", type: "info" });
   const [searchQuery, setSearchQuery] = useState("");
@@ -457,10 +478,53 @@ export default function CGYContractManager() {
     setTimeout(() => setNotification({ show: false, message: "", type: "info" }), 4000);
   }, []);
 
-  const saveToStorage = (list, cnt) => {
-    localStorage.setItem("cgy_contracts", JSON.stringify(list));
-    localStorage.setItem("cgy_contract_counter", String(cnt));
+  /* ── Firebase helpers ── */
+  const loadContracts = useCallback(async (uid) => {
+    if (!uid) return;
+    setIsLoadingContracts(true);
+    try {
+      const q = query(collection(db, "contracts"), where("userId", "==", uid));
+      const snap = await getDocs(q);
+      const loaded = snap.docs.map(d => d.data());
+      setContracts(loaded);
+    } catch (err) {
+      console.error("Error loading contracts:", err);
+    } finally {
+      setIsLoadingContracts(false);
+    }
+  }, []);
+
+  const saveContractToFirestore = async (contractData) => {
+    await setDoc(doc(db, "contracts", contractData.id), contractData);
   };
+
+  const deleteContractFromFirestore = async (id) => {
+    await deleteDoc(doc(db, "contracts", id));
+  };
+
+  const loadCounter = useCallback(async (uid) => {
+    if (!uid) return;
+    try {
+      const ref = doc(db, "contractCounters", uid);
+      const snap = await getDoc(ref);
+      if (snap.exists()) setCounter(snap.data().value || 1);
+    } catch (err) { console.error("Error loading counter:", err); }
+  }, []);
+
+  const saveCounter = async (uid, value) => {
+    if (!uid) return;
+    try {
+      await setDoc(doc(db, "contractCounters", uid), { value });
+    } catch (err) { console.error("Error saving counter:", err); }
+  };
+
+  /* Load from Firebase when userId is available */
+  useEffect(() => {
+    if (userId) {
+      loadContracts(userId);
+      loadCounter(userId);
+    }
+  }, [userId, loadContracts, loadCounter]);
 
   const startNew = (type) => {
     setEditing(blankContract(counter, type));
@@ -470,37 +534,45 @@ export default function CGYContractManager() {
     setEditing(null);
   };
 
-  const saveContract = () => {
+  const saveContract = async () => {
     if (!editing.clientName.trim()) return showNotification("Client name is required.", "error");
     if (!editing.projectTitle.trim()) return showNotification("Project title is required.", "error");
     if (!editing.agreedAmount) return showNotification("Agreed amount is required.", "error");
 
-    const updated = { ...editing, savedDate: new Date().toISOString() };
-    let newList, newCounter = counter;
+    const updated = { ...editing, savedDate: new Date().toISOString(), userId };
     const existing = contracts.find(c => c.id === updated.id);
-    if (existing) {
-      newList = contracts.map(c => c.id === updated.id ? updated : c);
-      showNotification("Contract updated successfully!", "success");
-    } else {
-      newList = [...contracts, updated];
-      newCounter = counter + 1;
-      setCounter(newCounter);
-      showNotification("Contract saved successfully!", "success");
+    try {
+      await saveContractToFirestore(updated);
+      if (existing) {
+        setContracts(prev => prev.map(c => c.id === updated.id ? updated : c));
+        showNotification("Contract updated successfully!", "success");
+      } else {
+        setContracts(prev => [...prev, updated]);
+        const newCounter = counter + 1;
+        setCounter(newCounter);
+        await saveCounter(userId, newCounter);
+        showNotification("Contract saved successfully!", "success");
+      }
+      setEditing(null);
+    } catch (err) {
+      console.error("Error saving contract:", err);
+      showNotification("Error saving contract. Please try again.", "error");
     }
-    setContracts(newList);
-    saveToStorage(newList, newCounter);
-    setEditing(null);
   };
 
-  const deleteContract = (id) => {
+  const deleteContract = async (id) => {
     if (!window.confirm("Delete this contract? This cannot be undone.")) return;
-    const newList = contracts.filter(c => c.id !== id);
-    setContracts(newList);
-    saveToStorage(newList, counter);
-    showNotification("Contract deleted.", "success");
+    try {
+      await deleteContractFromFirestore(id);
+      setContracts(prev => prev.filter(c => c.id !== id));
+      showNotification("Contract deleted.", "success");
+    } catch (err) {
+      console.error("Error deleting contract:", err);
+      showNotification("Error deleting contract. Please try again.", "error");
+    }
   };
 
-  const duplicateContract = (contract) => {
+  const duplicateContract = async (contract) => {
     const copy = {
       ...contract,
       id: uid(),
@@ -508,13 +580,19 @@ export default function CGYContractManager() {
       status: "DRAFT",
       savedDate: "",
       contractDate: today(),
+      userId,
     };
-    const newList = [...contracts, copy];
-    const newCounter = counter + 1;
-    setContracts(newList);
-    setCounter(newCounter);
-    saveToStorage(newList, newCounter);
-    showNotification("Contract duplicated!", "success");
+    try {
+      await saveContractToFirestore(copy);
+      setContracts(prev => [...prev, copy]);
+      const newCounter = counter + 1;
+      setCounter(newCounter);
+      await saveCounter(userId, newCounter);
+      showNotification("Contract duplicated!", "success");
+    } catch (err) {
+      console.error("Error duplicating contract:", err);
+      showNotification("Error duplicating contract. Please try again.", "error");
+    }
   };
 
   const set = (key) => (e) => setEditing(prev => ({ ...prev, [key]: e.target.value }));
@@ -809,10 +887,8 @@ export default function CGYContractManager() {
         .animate-slide-down { animation: slide-down 0.3s ease-out; }
         @media (max-width: 768px) {
           input, select, button, textarea { font-size: 16px !important; }
-          input[type="date"], input[type="datetime-local"], input[type="time"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; -moz-appearance: textfield !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
-          input[type="date"]::-webkit-calendar-picker-indicator, input[type="datetime-local"]::-webkit-calendar-picker-indicator, input[type="time"]::-webkit-calendar-picker-indicator { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='4' width='18' height='18' rx='2' ry='2'%3E%3C/rect%3E%3Cline x1='16' y1='2' x2='16' y2='6'%3E%3C/line%3E%3Cline x1='8' y1='2' x2='8' y2='6'%3E%3C/line%3E%3Cline x1='3' y1='10' x2='21' y2='10'%3E%3C/line%3E%3C/svg%3E"); background-size: 16px 16px; background-repeat: no-repeat; background-position: right 0.75rem center; cursor: pointer; width: 20px; height: 20px; padding: 0; margin: 0; opacity: 1; }
-          select { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; color: #111827 !important; }
-          select::-ms-expand { display: none; }
+          input[type="date"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
+          select { -webkit-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; }
         }
       `}</style>
 

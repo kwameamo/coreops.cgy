@@ -1509,7 +1509,7 @@ function App() {
         )}
         {mode === 'contract' && (
           <div className="view-panel view-panel-contract">
-            <CGYContractManager />
+            <CGYContractManager userId={authState.userId} />
           </div>
         )}
       </main>
