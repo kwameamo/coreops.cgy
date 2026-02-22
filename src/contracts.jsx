@@ -1,10 +1,6 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { db } from "./firebase";
-import {
-  collection, doc, setDoc, deleteDoc,
-  getDocs, query, where, orderBy,
-  getDoc, updateDoc
-} from "firebase/firestore";
+import { collection, doc, setDoc, deleteDoc, getDocs, query, where, getDoc } from "firebase/firestore";
 import {
   Plus, Trash2, Download, FileText, Edit2, X,
   CheckCircle, AlertCircle, Info, Search,
@@ -18,38 +14,7 @@ import {
 import logoUrl from "./assets/cgy_logo_new.png";
 import signUrl from "./assets/sign.png";
 
-// Convert imported asset to base64 for use in printed windows
-const getBase64Logo = () => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext("2d").drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.onerror = () => resolve(null);
-    img.src = logoUrl;
-  });
-};
 
-const getBase64Sign = () => {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = img.naturalWidth;
-      canvas.height = img.naturalHeight;
-      canvas.getContext("2d").drawImage(img, 0, 0);
-      resolve(canvas.toDataURL("image/png"));
-    };
-    img.onerror = () => resolve(null);
-    img.src = signUrl;
-  });
-};
 
 
 
@@ -138,326 +103,7 @@ const blankContract = (counter, type = "graphic") => ({
   savedDate: "",
 });
 
-/* ─────────────────────────────────────────────
-   PDF GENERATOR
-───────────────────────────────────────────── */
-const generateContractPDF = async (contract) => {
-  const typeInfo = CONTRACT_TYPES[contract.type];
-  const accentColor = typeInfo.color;
-  const depositAmt = contract.agreedAmount
-    ? ((parseFloat(contract.agreedAmount) * contract.depositPercent) / 100).toFixed(2)
-    : "—";
-  const balanceAmt = contract.agreedAmount
-    ? ((parseFloat(contract.agreedAmount) * (100 - contract.depositPercent)) / 100).toFixed(2)
-    : "—";
 
-    const [base64Logo, base64Sign] = await Promise.all([getBase64Logo(), getBase64Sign()]);
-
-  /* ── Mobile-safe: build HTML blob and trigger download/print ── */
-  const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Contract ${contract.contractNumber}</title>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&display=swap'),
-    @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600;700&family=Meow+Script&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'DM Sans', sans-serif; font-size: 11pt; color: #222; line-height: 1.65; padding: 0; }
-    .page { max-width: 760px; margin: 0 auto; padding: 48px 52px; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; padding-bottom: 24px; border-bottom: 4px solid ${accentColor}; }
-    .contract-badge { text-align: right; }
-    .contract-type { font-size: 11pt; font-weight: 700; color: ${accentColor}; text-transform: uppercase; letter-spacing: 0.06em; }
-    .contract-num { font-size: 9pt; color: #888; margin-top: 4px; }
-    .contract-date { font-size: 9pt; color: #888; }
-    .legal-banner { background: #111; color: #fff; text-align: center; padding: 10px 16px; font-size: 9pt; letter-spacing: 0.04em; margin-bottom: 28px; border-radius: 3px; }
-    h2 { font-family: 'DM Serif Display', serif; font-size: 14pt; color: ${accentColor}; margin: 28px 0 10px; padding-bottom: 6px; border-bottom: 1.5px solid ${accentColor}33; }
-    h3 { font-size: 10.5pt; font-weight: 700; color: #222; margin: 16px 0 6px; }
-    p, li { margin-bottom: 6px; }
-    ul { padding-left: 20px; margin-bottom: 8px; }
-    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0; border: 1px solid #ddd; border-radius: 4px; overflow: hidden; margin-bottom: 18px; }
-    .info-cell { padding: 8px 12px; border-bottom: 1px solid #eee; border-right: 1px solid #eee; }
-    .info-cell:nth-child(even) { border-right: none; }
-    .info-cell:last-child, .info-cell:nth-last-child(2):nth-child(odd) { border-bottom: none; }
-    .info-label { font-size: 7.5pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: #888; margin-bottom: 2px; }
-    .info-val { font-size: 10pt; font-weight: 600; color: #111; }
-    .full-cell { grid-column: 1 / -1; border-right: none; }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-    th { background: #111; color: #fff; padding: 8px 12px; text-align: left; font-size: 9pt; font-weight: 600; letter-spacing: 0.04em; }
-    td { padding: 8px 12px; border-bottom: 1px solid #eee; font-size: 10pt; }
-    tr:nth-child(even) td { background: #fafafa; }
-    .payment-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
-    .pay-box { border: 1.5px solid ${accentColor}; border-radius: 4px; padding: 12px 14px; }
-    .pay-label { font-size: 8pt; font-weight: 700; color: ${accentColor}; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
-    .pay-amount { font-family: 'DM Serif Display', serif; font-size: 16pt; color: #111; }
-    .pay-note { font-size: 8.5pt; color: #666; margin-top: 2px; }
-    .kill-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
-    .kill-table th { background: #f5f5f5; color: #333; font-size: 9pt; }
-    .kill-table td { font-size: 9.5pt; }
-    .badge-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 10px 0; }
-    .badge { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 8.5pt; font-weight: 600; }
-    .badge-yes { background: #f0fdf4; color: #16a34a; border: 1px solid #86efac; }
-    .badge-no { background: #fef2f2; color: #dc2626; border: 1px solid #fca5a5; }
-    .sig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; margin-top: 20px; }
-    .sig-party-label { font-size: 9pt; font-weight: 700; color: ${accentColor}; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
-    .sig-line { border-bottom: 1.5px solid #333; margin-bottom: 5px; height: 36px; }
-    .sig-field-label { font-size: 8pt; color: #888; margin-bottom: 12px; }
-    .footer { margin-top: 36px; padding-top: 16px; border-top: 2px solid ${accentColor}; text-align: center; font-size: 8.5pt; color: #888; }
-    .warn-box { background: #fff8f0; border: 1.5px solid ${accentColor}66; border-radius: 4px; padding: 10px 14px; margin: 12px 0; font-size: 9.5pt; color: #7c3a00; }
-    @media print {
-      body { padding: 0; }
-      .page { padding: 36px 44px; }
-    }
-  </style>
-</head>
-<body>
-<div class="page">
-
-  <!-- HEADER -->
-  <div class="header">
-    <div>
-      ${base64Logo
-        ? `<img src="${base64Logo}" alt="Curio Graphics Yard" style="height:52px;width:auto;display:block;object-fit:contain;" />`
-        : `<div style="font-family:'DM Serif Display',serif;font-size:28pt;color:#CC2222;line-height:1;">CGY</div><div style="font-size:9pt;color:#666;margin-top:4px;letter-spacing:0.08em;text-transform:uppercase;">Curio Graphics Yard</div>`
-      }
-    </div>
-    <div class="contract-badge">
-      <div class="contract-type">${typeInfo.label}</div>
-      <div class="contract-num">Contract #${contract.contractNumber}</div>
-      <div class="contract-date">Dated: ${fmtDate(contract.contractDate)}</div>
-    </div>
-  </div>
-
-  <div class="legal-banner">⚖ This is a legally binding agreement. Both parties must read all terms before signing.</div>
-
-  <!-- 1. PARTIES -->
-  <h2>1. Parties & Project Overview</h2>
-  <div class="info-grid">
-    <div class="info-cell"><div class="info-label">Designer / Studio</div><div class="info-val">Curio Graphics Yard (CGY)</div></div>
-    <div class="info-cell"><div class="info-label">Designer Email</div><div class="info-val">${contract.designerEmail}</div></div>
-    ${contract.designerPhone ? `<div class="info-cell"><div class="info-label">Designer Phone</div><div class="info-val">${contract.designerPhone}</div></div>` : ""}
-    <div class="info-cell ${!contract.designerPhone ? "full-cell" : ""}"><div class="info-label">Designer Address</div><div class="info-val">${contract.designerAddress}</div></div>
-    <div class="info-cell"><div class="info-label">Client Name</div><div class="info-val">${contract.clientName || "—"}</div></div>
-    <div class="info-cell"><div class="info-label">Client Company / Brand</div><div class="info-val">${contract.clientCompany || "—"}</div></div>
-    <div class="info-cell"><div class="info-label">Client Email</div><div class="info-val">${contract.clientEmail || "—"}</div></div>
-    <div class="info-cell"><div class="info-label">Client Phone</div><div class="info-val">${contract.clientPhone || "—"}</div></div>
-    ${contract.clientAddress ? `<div class="info-cell full-cell"><div class="info-label">Client Address</div><div class="info-val">${contract.clientAddress}</div></div>` : ""}
-    <div class="info-cell full-cell"><div class="info-label">Project Title</div><div class="info-val">${contract.projectTitle || "—"}</div></div>
-    <div class="info-cell"><div class="info-label">Start Date</div><div class="info-val">${fmtDate(contract.startDate)}</div></div>
-    <div class="info-cell"><div class="info-label">Estimated End Date</div><div class="info-val">${contract.endDate ? fmtDate(contract.endDate) : "TBD"}</div></div>
-  </div>
-
-  <!-- 2. SERVICES -->
-  <h2>2. Services Selected & Agreed Rates</h2>
-  ${contract.servicesSelected.length > 0 ? `
-  <table>
-    <thead><tr><th>Service</th><th>Rate (GHS)</th><th>Rate (USD Eq.)</th></tr></thead>
-    <tbody>
-      ${typeInfo.services.filter(s => contract.servicesSelected.includes(s.label)).map(s => `
-      <tr><td>${s.label}</td><td>GHS ${s.ghsMin.toLocaleString()} – ${s.ghsMax.toLocaleString()}</td><td>USD ${s.usdMin || "—"} – ${s.usdMax || "—"}</td></tr>`).join("")}
-    </tbody>
-  </table>` : "<p>No services selected.</p>"}
-  ${contract.customServices ? `<p><strong>Additional / Custom Services:</strong> ${contract.customServices}</p>` : ""}
-  <div class="info-grid" style="margin-top:12px">
-    <div class="info-cell"><div class="info-label">Agreed Project Rate</div><div class="info-val">${contract.currency} ${contract.agreedAmount || "—"}</div></div>
-    <div class="info-cell"><div class="info-label">Currency</div><div class="info-val">${contract.currency}</div></div>
-    <div class="info-cell"><div class="info-label">Deposit Percentage</div><div class="info-val">${contract.depositPercent}%</div></div>
-    <div class="info-cell"><div class="info-label">Revisions Included</div><div class="info-val">${contract.revisionsIncluded} rounds</div></div>
-  </div>
-
-  <!-- 3. SCOPE -->
-  <h2>3. Scope of Work & Deliverables</h2>
-  ${contract.deliverables ? `<p>${contract.deliverables.replace(/\n/g, "<br>")}</p>` : `<ul>
-    <li>Deliverables as described in Section 2 services above</li>
-    <li>Final files in agreed formats (PNG, JPG, SVG, PDF as applicable)</li>
-    <li>Source/native files only if Section 9 indicates inclusion</li>
-  </ul>`}
-  <div class="warn-box">⚠ Any work not explicitly listed above is considered OUT OF SCOPE and will be quoted and billed separately via written Change Order.</div>
-  ${contract.specialRequirements ? `<h3>Special Requirements</h3><p>${contract.specialRequirements}</p>` : ""}
-
-  <!-- 4. TIMELINE -->
-  <h2>4. Project Timeline & Milestones</h2>
-  <table>
-    <thead><tr><th>Phase</th><th>Deliverable</th><th>Due Date</th><th>Payment Due</th></tr></thead>
-    <tbody>
-      <tr><td>Phase 1 — Brief & Deposit</td><td>Signed contract + deposit received</td><td>${fmtDate(contract.startDate)}</td><td>${contract.depositPercent}% — ${contract.currency} ${depositAmt}</td></tr>
-      <tr><td>Phase 2 — Concepts Presented</td><td>Initial designs / drafts</td><td>TBD</td><td>—</td></tr>
-      <tr><td>Phase 3 — Revisions (${contract.revisionsIncluded} rounds)</td><td>Refined designs per feedback</td><td>TBD</td><td>—</td></tr>
-      <tr><td>Phase 4 — Final Approval</td><td>Client written sign-off</td><td>TBD</td><td>—</td></tr>
-      <tr><td>Phase 5 — Final Delivery</td><td>All agreed final files delivered</td><td>${contract.endDate ? fmtDate(contract.endDate) : "TBD"}</td><td>${100 - contract.depositPercent}% — ${contract.currency} ${balanceAmt}</td></tr>
-    </tbody>
-  </table>
-  <p style="font-size:9.5pt;color:#7c3a00;margin-top:8px">⏱ If the Client fails to respond within 5 business days of any submission, the timeline shifts forward accordingly. A Rush Fee of ${contract.rushFeePercent}% applies for urgent delivery after a Client-caused delay.</p>
-
-  <!-- 5. REVISIONS -->
-  <h2>5. Revision Policy</h2>
-  <table>
-    <thead><tr><th>Item</th><th>Terms</th></tr></thead>
-    <tbody>
-      <tr><td>Included Revisions</td><td>${contract.revisionsIncluded} rounds per deliverable</td></tr>
-      <tr><td>Additional Revisions</td><td>${contract.currency} ${contract.revisionRate} per additional round</td></tr>
-      <tr><td>New Design Direction</td><td>Treated as a new project — re-quoted separately</td></tr>
-    </tbody>
-  </table>
-  <p>A "revision" means minor changes to an approved concept. Scrapping the direction entirely = new project. Once a design is approved in writing, that phase is <strong>closed</strong>.</p>
-
-  <!-- 6. PAYMENT -->
-  <h2>6. Payment Terms</h2>
-  <div class="payment-grid">
-    <div class="pay-box">
-      <div class="pay-label">Deposit Due at Signing</div>
-      <div class="pay-amount">${contract.currency} ${depositAmt}</div>
-      <div class="pay-note">${contract.depositPercent}% — Work begins only after this is received</div>
-    </div>
-    <div class="pay-box">
-      <div class="pay-label">Balance Due at Final Delivery</div>
-      <div class="pay-amount">${contract.currency} ${balanceAmt}</div>
-      <div class="pay-note">${100 - contract.depositPercent}% — Paid before final files are released</div>
-    </div>
-  </div>
-  <div class="info-grid">
-    <div class="info-cell"><div class="info-label">Payment Account</div><div class="info-val">${contract.paymentAccount}</div></div>
-    <div class="info-cell"><div class="info-label">Institution</div><div class="info-val">${contract.paymentInstitution}</div></div>
-    <div class="info-cell full-cell"><div class="info-label">Beneficiary</div><div class="info-val">${contract.paymentBeneficiary}</div></div>
-  </div>
-  <h3>Kill Fee — Cancellation Schedule</h3>
-  <table class="kill-table">
-    <thead><tr><th>Project Completion at Cancellation</th><th>Amount Owed</th></tr></thead>
-    <tbody>
-      <tr><td>Before concepts delivered</td><td>Client forfeits deposit — no refund</td></tr>
-      <tr><td>After concepts delivered</td><td>75% of total project rate</td></tr>
-      <tr><td>Near completion (revisions done)</td><td>100% of total project rate</td></tr>
-    </tbody>
-  </table>
-  <p>Late payments after 7 days incur a holding fee of GHS 50 / USD 5 per day. Final files are withheld until full payment is confirmed.</p>
-
-  <!-- 7. CLIENT RESPONSIBILITIES -->
-  <h2>7. Client Responsibilities</h2>
-  <ul>
-    <li>Provide all required content (text, logos, brand assets, references) before work begins.</li>
-    <li>Designate ONE point of contact — consolidated feedback only, no conflicting instructions.</li>
-    <li>Provide written feedback within 5 business days of each submission.</li>
-    <li>NOT share, post, or use any draft or work-in-progress designs publicly before final approval.</li>
-    <li>Ensure all content provided to CGY is owned or properly licensed by the Client.</li>
-  </ul>
-  ${contract.type === "merch" ? `
-  <ul>
-    <li>Specify the intended print method (screen print, DTF, embroidery) upfront — this affects file preparation.</li>
-    <li>Verify all design details (spelling, measurements, color codes) before written approval.</li>
-    <li>NOT send CGY files to manufacturers without paying the full balance first.</li>
-  </ul>` : ""}
-
-  <!-- 8. INTELLECTUAL PROPERTY -->
-  <h2>8. Intellectual Property & Ownership</h2>
-  <div class="badge-row">
-    <span class="badge ${contract.portfolioRights ? "badge-yes" : "badge-no"}">${contract.portfolioRights ? "✓" : "✗"} CGY Portfolio Rights</span>
-    <span class="badge ${contract.sourceFilesIncluded ? "badge-yes" : "badge-no"}">${contract.sourceFilesIncluded ? "✓" : "✗"} Source Files Included</span>
-    <span class="badge ${contract.exclusivity ? "badge-yes" : "badge-no"}">${contract.exclusivity ? "✓" : "✗"} Exclusive License</span>
-  </div>
-  <p><strong>Ownership Before Full Payment:</strong> All designs remain CGY's exclusive intellectual property until full payment is confirmed. The Client has NO right to use, publish, or distribute any design — including drafts — until the final invoice is paid in full.</p>
-  <p><strong>License Upon Full Payment:</strong> ${contract.licenseType} license is granted to the Client upon receipt of full payment, for the Client's brand/business use only.</p>
-  ${!contract.sourceFilesIncluded ? `<p><strong>Source Files:</strong> Native/source files (.AI, .PSD, etc.) are NOT included in standard delivery${contract.sourceFilesFee ? `. They may be purchased separately at ${contract.currency} ${contract.sourceFilesFee}` : ""}.</p>` : ""}
-
-  <!-- 9. PRODUCTION DISCLAIMER (merch only) -->
-  ${contract.type === "merch" ? `
-  <h2>9. Production & Printing Disclaimer</h2>
-  <p>CGY provides design files only. CGY is NOT responsible for:</p>
-  <ul>
-    <li>Print quality, color variations, or results caused by third-party printers or manufacturers.</li>
-    <li>Compatibility issues if the Client changes the print method after files are delivered.</li>
-    <li>Sizing, fit, or construction of physical garments.</li>
-    <li>Errors on printed/produced garments from Client's failure to proofread before production.</li>
-  </ul>
-  <div class="warn-box">⚠ It is the Client's responsibility to verify all file specifications with their manufacturer BEFORE sending to production. CGY strongly recommends a test print or sample before full production runs.</div>` : ""}
-
-  <!-- TERMINATION -->
-  <h2>${contract.type === "merch" ? "10" : "9"}. Termination</h2>
-  <ul>
-    <li>Either party may terminate with written notice (WhatsApp or email).</li>
-    <li>Client pays for all work completed to date, plus the applicable kill fee (Section 6).</li>
-    <li>Final files are released only after all outstanding payments are received.</li>
-    <li>CGY may terminate immediately if the Client is abusive, non-communicative for 14+ days, or requests illegal/unethical content.</li>
-  </ul>
-
-  <!-- WARRANTIES & LIABILITY -->
-  <h2>${contract.type === "merch" ? "11" : "10"}. Warranties & Limitation of Liability</h2>
-  <ul>
-    <li>CGY warrants all designs will be original and not knowingly infringe third-party rights.</li>
-    <li>CGY makes NO guarantee of specific business outcomes from any design.</li>
-    <li>Client warrants all provided content does not infringe third-party rights — Client bears full legal responsibility for their own materials.</li>
-    <li>CGY's maximum liability under this Agreement shall not exceed the total fees paid for this project.</li>
-  </ul>
-
-  <!-- DISPUTE RESOLUTION -->
-  <h2>${contract.type === "merch" ? "12" : "11"}. Dispute Resolution & Governing Law</h2>
-  <p>In the event of a dispute, both parties agree to attempt resolution through direct good-faith communication first. If unresolved within 14 days, the matter may be escalated to mediation. This Agreement is governed by the laws of <strong>Ghana</strong>.</p>
-
-  <!-- GENERAL PROVISIONS -->
-  <h2>${contract.type === "merch" ? "13" : "12"}. General Provisions</h2>
-  <ul>
-    <li>This Agreement is the complete understanding between both parties, replacing all prior verbal or written discussions.</li>
-    <li>All changes to scope, price, or timeline must be agreed in writing by both parties.</li>
-    <li>CGY operates as an independent creative studio — not an employee of the Client.</li>
-    <li>If any clause is found unenforceable, all other clauses remain in full effect.</li>
-  </ul>
-
-  <!-- SIGNATURES -->
-  <h2>Signatures & Agreement</h2>
-  <p>By signing below, both parties confirm they have fully read, understood, and agreed to all terms of this Agreement.</p>
-  <div class="sig-grid">
-    <div class="sig-party">
-      <div class="sig-party-label">Designer — Curio Graphics Yard</div>
-      <div style="height:52px;margin-bottom:5px;display:flex;align-items:flex-end;">
-        ${base64Sign
-          ? `<img src="${base64Sign}" alt="Signature" style="height:65px;width:auto;object-fit:contain;" />`
-          : `<span style="font-family:'Meow Script',cursive;font-size:26pt;color:#CC2222;line-height:1;">davidAmo</span>`
-        }
-      </div>
-      <div class="sig-field-label">Signature</div>
-      <div style="height:36px;margin-bottom:5px;display:flex;align-items:center;">
-        <span style="font-size:11pt;font-weight:600;color:#111;">David Amo</span>
-      </div>
-      <div class="sig-field-label">Printed Name</div>
-      <div style="height:36px;margin-bottom:5px;display:flex;align-items:center;">
-        <span style="font-size:11pt;color:#111;">${new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</span>
-      </div>
-      <div class="sig-field-label">Date</div>
-    </div>
-    <div class="sig-party">
-      <div class="sig-party-label">Client</div>
-      <div class="sig-line"></div><div class="sig-field-label">Signature</div>
-      <div class="sig-line"></div><div class="sig-field-label">Printed Name</div>
-      <div class="sig-line"></div><div class="sig-field-label">Date</div>
-    </div>
-  </div>
-
-  <div class="footer">
-    Curio Graphics Yard — A Creative Design Studio Amplifying Fashion and Music through Inspired Design.<br>
-    Contract #${contract.contractNumber} • Both parties retain a signed copy for their records.
-  </div>
-</div>
-<script>window.onload = function() { window.print(); }</script>
-</body></html>`;
-
-  /* Try popup first (desktop); fall back to blob URL (mobile) */
-  const win = window.open("", "_blank");
-  if (win && !win.closed) {
-    win.document.write(htmlContent);
-    win.document.close();
-  } else {
-    /* Mobile fallback: open blob URL in same tab or trigger download */
-    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
-};
 
 /* ─────────────────────────────────────────────
    MAIN COMPONENT
@@ -466,7 +112,7 @@ export default function CGYContractManager({ userId = "" }) {
   const [currentView, setCurrentView] = useState("create");
   const [contracts, setContracts] = useState([]);
   const [counter, setCounter] = useState(1);
-  const [isLoadingContracts, setIsLoadingContracts] = useState(false);
+  const [printContract, setPrintContract] = useState(null);
   const [editing, setEditing] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: "", type: "info" });
   const [searchQuery, setSearchQuery] = useState("");
@@ -478,53 +124,36 @@ export default function CGYContractManager({ userId = "" }) {
     setTimeout(() => setNotification({ show: false, message: "", type: "info" }), 4000);
   }, []);
 
-  /* ── Firebase helpers ── */
+  /* ── Firebase ── */
   const loadContracts = useCallback(async (uid) => {
     if (!uid) return;
-    setIsLoadingContracts(true);
     try {
-      const q = query(collection(db, "contracts"), where("userId", "==", uid));
-      const snap = await getDocs(q);
-      const loaded = snap.docs.map(d => d.data());
-      setContracts(loaded);
-    } catch (err) {
-      console.error("Error loading contracts:", err);
-    } finally {
-      setIsLoadingContracts(false);
-    }
+      const snap = await getDocs(query(collection(db, "contracts"), where("userId", "==", uid)));
+      setContracts(snap.docs.map(d => d.data()));
+    } catch (err) { console.error("loadContracts:", err); }
   }, []);
-
-  const saveContractToFirestore = async (contractData) => {
-    await setDoc(doc(db, "contracts", contractData.id), contractData);
-  };
-
-  const deleteContractFromFirestore = async (id) => {
-    await deleteDoc(doc(db, "contracts", id));
-  };
 
   const loadCounter = useCallback(async (uid) => {
     if (!uid) return;
     try {
-      const ref = doc(db, "contractCounters", uid);
-      const snap = await getDoc(ref);
+      const snap = await getDoc(doc(db, "contractCounters", uid));
       if (snap.exists()) setCounter(snap.data().value || 1);
-    } catch (err) { console.error("Error loading counter:", err); }
+    } catch (err) { console.error("loadCounter:", err); }
   }, []);
 
-  const saveCounter = async (uid, value) => {
-    if (!uid) return;
-    try {
-      await setDoc(doc(db, "contractCounters", uid), { value });
-    } catch (err) { console.error("Error saving counter:", err); }
+  const saveCounter = async (uid, val) => {
+    try { await setDoc(doc(db, "contractCounters", uid), { value: val }); } catch {}
   };
 
-  /* Load from Firebase when userId is available */
   useEffect(() => {
-    if (userId) {
-      loadContracts(userId);
-      loadCounter(userId);
-    }
+    if (userId) { loadContracts(userId); loadCounter(userId); }
   }, [userId, loadContracts, loadCounter]);
+
+  /* ── Print ── */
+  const exportToPDF = (contract) => {
+    setPrintContract(contract);
+    setTimeout(() => window.print(), 100);
+  };
 
   const startNew = (type) => {
     setEditing(blankContract(counter, type));
@@ -538,61 +167,41 @@ export default function CGYContractManager({ userId = "" }) {
     if (!editing.clientName.trim()) return showNotification("Client name is required.", "error");
     if (!editing.projectTitle.trim()) return showNotification("Project title is required.", "error");
     if (!editing.agreedAmount) return showNotification("Agreed amount is required.", "error");
-
     const updated = { ...editing, savedDate: new Date().toISOString(), userId };
     const existing = contracts.find(c => c.id === updated.id);
     try {
-      await saveContractToFirestore(updated);
+      await setDoc(doc(db, "contracts", updated.id), updated);
       if (existing) {
         setContracts(prev => prev.map(c => c.id === updated.id ? updated : c));
         showNotification("Contract updated successfully!", "success");
       } else {
         setContracts(prev => [...prev, updated]);
-        const newCounter = counter + 1;
-        setCounter(newCounter);
-        await saveCounter(userId, newCounter);
+        const nc = counter + 1; setCounter(nc);
+        await saveCounter(userId, nc);
         showNotification("Contract saved successfully!", "success");
       }
       setEditing(null);
-    } catch (err) {
-      console.error("Error saving contract:", err);
-      showNotification("Error saving contract. Please try again.", "error");
-    }
+    } catch (err) { showNotification("Error saving contract.", "error"); }
   };
 
   const deleteContract = async (id) => {
     if (!window.confirm("Delete this contract? This cannot be undone.")) return;
     try {
-      await deleteContractFromFirestore(id);
+      await deleteDoc(doc(db, "contracts", id));
       setContracts(prev => prev.filter(c => c.id !== id));
       showNotification("Contract deleted.", "success");
-    } catch (err) {
-      console.error("Error deleting contract:", err);
-      showNotification("Error deleting contract. Please try again.", "error");
-    }
+    } catch (err) { showNotification("Error deleting contract.", "error"); }
   };
 
   const duplicateContract = async (contract) => {
-    const copy = {
-      ...contract,
-      id: uid(),
-      contractNumber: `CGY-${new Date().getFullYear()}-${pad(counter)}`,
-      status: "DRAFT",
-      savedDate: "",
-      contractDate: today(),
-      userId,
-    };
+    const copy = { ...contract, id: uid(), contractNumber: `CGY-${new Date().getFullYear()}-${pad(counter)}`, status: "DRAFT", savedDate: "", contractDate: today(), userId };
     try {
-      await saveContractToFirestore(copy);
+      await setDoc(doc(db, "contracts", copy.id), copy);
       setContracts(prev => [...prev, copy]);
-      const newCounter = counter + 1;
-      setCounter(newCounter);
-      await saveCounter(userId, newCounter);
+      const nc = counter + 1; setCounter(nc);
+      await saveCounter(userId, nc);
       showNotification("Contract duplicated!", "success");
-    } catch (err) {
-      console.error("Error duplicating contract:", err);
-      showNotification("Error duplicating contract. Please try again.", "error");
-    }
+    } catch (err) { showNotification("Error duplicating contract.", "error"); }
   };
 
   const set = (key) => (e) => setEditing(prev => ({ ...prev, [key]: e.target.value }));
@@ -869,7 +478,7 @@ export default function CGYContractManager({ userId = "" }) {
               <button onClick={saveContract} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">
                 {contracts.find(c => c.id === editing.id) ? "Update Contract" : "Save Contract"}
               </button>
-              <button onClick={() => generateContractPDF(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
+              <button onClick={() => exportToPDF(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
                 <Download size={20} /> Export to PDF
               </button>
             </div>
@@ -885,10 +494,20 @@ export default function CGYContractManager({ userId = "" }) {
       <style>{`
         @keyframes slide-down { from { opacity: 0; transform: translate(-50%, -20px); } to { opacity: 1; transform: translate(-50%, 0); } }
         .animate-slide-down { animation: slide-down 0.3s ease-out; }
+        @media print {
+          body * { visibility: hidden; }
+          .contract-print-area, .contract-print-area * { visibility: visible; }
+          .contract-print-area { position: absolute; left: 0; top: 0; width: 100%; background: white; }
+          .no-print { display: none !important; }
+        }
+        .contract-print-area { display: none; }
+        @media print { .contract-print-area { display: block !important; } }
         @media (max-width: 768px) {
           input, select, button, textarea { font-size: 16px !important; }
-          input[type="date"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
-          select { -webkit-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; }
+          input[type="date"] { width: 100% !important; max-width: 100% !important; -webkit-appearance: none !important; -moz-appearance: textfield !important; appearance: none !important; background-color: white !important; border: 2px solid #d1d5db !important; border-radius: 0.5rem !important; padding: 0.75rem 1rem !important; color: #111827 !important; font-size: 16px !important; }
+          input[type="date"]::-webkit-calendar-picker-indicator { -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23334155' stroke-width='2'%3E%3Crect x='3' y='4' width='18' height='18' rx='2'/%3E%3Cline x1='16' y1='2' x2='16' y2='6'/%3E%3Cline x1='8' y1='2' x2='8' y2='6'/%3E%3Cline x1='3' y1='10' x2='21' y2='10'/%3E%3C/svg%3E"); background-size: 16px; background-repeat: no-repeat; background-position: right 0.75rem center; width: 20px; height: 20px; padding: 0; opacity: 1; }
+          select { -webkit-appearance: none !important; -moz-appearance: none !important; appearance: none !important; background-color: white !important; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23334155' d='M6 9L1 4h10z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 0.75rem center; background-size: 12px 12px; padding-right: 2.5rem !important; color: #111827 !important; }
+          select::-ms-expand { display: none; }
         }
       `}</style>
 
@@ -1025,7 +644,7 @@ export default function CGYContractManager({ userId = "" }) {
                         <td className="text-center p-3 md:p-4">
                           <div className="flex gap-2 justify-center">
                             <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                            <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                            <button onClick={() => exportToPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                             <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                             <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                           </div>
@@ -1060,7 +679,7 @@ export default function CGYContractManager({ userId = "" }) {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                      <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                      <button onClick={() => exportToPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                       <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                       <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                     </div>
@@ -1157,7 +776,7 @@ export default function CGYContractManager({ userId = "" }) {
                       </div>
                       <div className="flex gap-2 flex-wrap">
                         <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                        <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                        <button onClick={() => exportToPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                         <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                         <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                       </div>
@@ -1198,7 +817,7 @@ export default function CGYContractManager({ userId = "" }) {
                           <td className="text-center p-3 md:p-4">
                             <div className="flex gap-2 justify-center">
                               <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                              <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                              <button onClick={() => exportToPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                               <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                               <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                             </div>
@@ -1216,6 +835,194 @@ export default function CGYContractManager({ userId = "" }) {
           </div>
         )}
       </div>
+
+
+      {/* ── Hidden Print Area — visible only when window.print() is called ── */}
+      {printContract && (() => {
+        const pc = printContract;
+        const ti = CONTRACT_TYPES[pc.type] || CONTRACT_TYPES.graphic;
+        const ac = ti.color;
+        const dep = pc.agreedAmount ? ((parseFloat(pc.agreedAmount) * pc.depositPercent) / 100).toFixed(2) : "—";
+        const bal = pc.agreedAmount ? ((parseFloat(pc.agreedAmount) * (100 - pc.depositPercent)) / 100).toFixed(2) : "—";
+        const delivList = pc.deliverables ? pc.deliverables.split("\n").filter(Boolean) : [];
+        const allSvcs = [...(pc.servicesSelected || []), ...(pc.customServices ? [pc.customServices] : [])];
+        const s = {
+          page: { fontFamily: "'DM Sans','Segoe UI',Arial,sans-serif", fontSize: 11, color: "#222", lineHeight: 1.65, maxWidth: 760, margin: "0 auto", padding: "48px 52px", background: "#fff" },
+          hdr: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 32, paddingBottom: 24, borderBottom: `4px solid ${ac}` },
+          badge: { textAlign: "right" },
+          ctype: { fontSize: 11, fontWeight: 700, color: ac, textTransform: "uppercase", letterSpacing: "0.06em" },
+          cnum: { fontSize: 9, color: "#888", marginTop: 4 },
+          banner: { background: "#111", color: "#fff", textAlign: "center", padding: "10px 16px", fontSize: 9, letterSpacing: "0.04em", marginBottom: 28, borderRadius: 3 },
+          h2: { fontFamily: "Georgia,serif", fontSize: 14, fontWeight: 700, color: ac, margin: "28px 0 10px", paddingBottom: 6, borderBottom: `1.5px solid ${ac}44` },
+          grid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0, border: "1px solid #ddd", borderRadius: 4, overflow: "hidden", marginBottom: 18 },
+          cell: { padding: "8px 12px", borderBottom: "1px solid #eee", borderRight: "1px solid #eee", fontSize: 10 },
+          lbl: { fontSize: 7.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#888", marginBottom: 2 },
+          val: { fontSize: 10, fontWeight: 600, color: "#111" },
+          full: { gridColumn: "1/-1", borderRight: "none" },
+          tbl: { width: "100%", borderCollapse: "collapse", margin: "12px 0" },
+          th: { background: "#111", color: "#fff", padding: "8px 12px", textAlign: "left", fontSize: 9, fontWeight: 600 },
+          td: { padding: "8px 12px", borderBottom: "1px solid #eee", fontSize: 10 },
+          payGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, margin: "12px 0" },
+          payBox: { border: `1.5px solid ${ac}`, borderRadius: 4, padding: "12px 14px" },
+          payLbl: { fontSize: 8, fontWeight: 700, color: ac, textTransform: "uppercase", marginBottom: 4 },
+          payAmt: { fontSize: 16, fontWeight: 700, color: "#111" },
+          payNote: { fontSize: 8.5, color: "#666", marginTop: 2 },
+          badgeRow: { display: "flex", gap: 8, flexWrap: "wrap", margin: "10px 0" },
+          badgeY: { display: "inline-block", padding: "4px 10px", borderRadius: 20, fontSize: 8.5, fontWeight: 600, background: "#f0fdf4", color: "#16a34a", border: "1px solid #86efac" },
+          badgeN: { display: "inline-block", padding: "4px 10px", borderRadius: 20, fontSize: 8.5, fontWeight: 600, background: "#fef2f2", color: "#dc2626", border: "1px solid #fca5a5" },
+          sigGrid: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32, marginTop: 20 },
+          sigTop: { borderTop: `2px solid ${ac}`, paddingTop: 12 },
+          sigLbl: { fontSize: 9, fontWeight: 700, color: ac, textTransform: "uppercase", marginBottom: 12 },
+          sigLine: { borderBottom: "1.5px solid #333", marginBottom: 4, height: 36 },
+          sigFld: { fontSize: 8, color: "#aaa", textTransform: "uppercase", marginBottom: 12 },
+          ftr: { marginTop: 36, paddingTop: 16, borderTop: `2px solid ${ac}`, textAlign: "center", fontSize: 8.5, color: "#888" },
+          warn: { background: "#fff8f0", border: `1.5px solid ${ac}66`, borderRadius: 4, padding: "10px 14px", margin: "12px 0", fontSize: 9.5, color: "#7c3a00" },
+          clauseTitle: { fontSize: 10, fontWeight: 700, color: "#333", marginBottom: 4, marginTop: 12 },
+          clauseText: { fontSize: 10, color: "#444", lineHeight: 1.6, marginBottom: 4 },
+        };
+        return (
+          <div className="contract-print-area">
+            <div style={s.page}>
+              {/* Header */}
+              <div style={s.hdr}>
+                <img src={logoUrl} alt="CGY" style={{ height: 52, width: "auto", objectFit: "contain" }} />
+                <div style={s.badge}>
+                  <div style={s.ctype}>{ti.label} Contract</div>
+                  <div style={s.cnum}>Contract #{pc.contractNumber}</div>
+                  <div style={s.cnum}>Dated: {fmtDate(pc.contractDate)}</div>
+                </div>
+              </div>
+              <div style={s.banner}>⚖ This is a legally binding agreement. Both parties must read all terms before signing.</div>
+
+              {/* 1. Parties */}
+              <div style={s.h2}>1. Parties &amp; Project Overview</div>
+              <div style={s.grid}>
+                <div style={s.cell}><div style={s.lbl}>Designer / Studio</div><div style={s.val}>Curio Graphics Yard (CGY)</div></div>
+                <div style={s.cell}><div style={s.lbl}>Designer Email</div><div style={s.val}>{pc.designerEmail}</div></div>
+                <div style={{ ...s.cell, ...s.full }}><div style={s.lbl}>Designer Address</div><div style={s.val}>{pc.designerAddress}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Client Name</div><div style={s.val}>{pc.clientName || "—"}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Client Company / Brand</div><div style={s.val}>{pc.clientCompany || "—"}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Client Email</div><div style={s.val}>{pc.clientEmail || "—"}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Client Phone</div><div style={s.val}>{pc.clientPhone || "—"}</div></div>
+                {pc.clientAddress && <div style={{ ...s.cell, ...s.full }}><div style={s.lbl}>Client Address</div><div style={s.val}>{pc.clientAddress}</div></div>}
+                <div style={{ ...s.cell, ...s.full }}><div style={s.lbl}>Project Title</div><div style={s.val}>{pc.projectTitle || "—"}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Start Date</div><div style={s.val}>{fmtDate(pc.startDate)}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Estimated End Date</div><div style={s.val}>{pc.endDate ? fmtDate(pc.endDate) : "TBD"}</div></div>
+              </div>
+
+              {/* 2. Services */}
+              <div style={s.h2}>2. Services &amp; Agreed Rates</div>
+              {allSvcs.length > 0
+                ? <ul style={{ paddingLeft: 20, marginBottom: 12 }}>{allSvcs.map((sv, i) => <li key={i} style={{ fontSize: 10, marginBottom: 3 }}>{sv}</li>)}</ul>
+                : <p style={{ fontSize: 10, color: "#666" }}>No services selected.</p>}
+              <div style={s.grid}>
+                <div style={s.cell}><div style={s.lbl}>Agreed Amount</div><div style={s.val}>{pc.currency} {pc.agreedAmount || "—"}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Currency</div><div style={s.val}>{pc.currency}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Deposit %</div><div style={s.val}>{pc.depositPercent}%</div></div>
+                <div style={s.cell}><div style={s.lbl}>Revisions Included</div><div style={s.val}>{pc.revisionsIncluded} rounds</div></div>
+              </div>
+
+              {/* 3. Scope */}
+              <div style={s.h2}>3. Scope of Work &amp; Deliverables</div>
+              {delivList.length > 0
+                ? <ul style={{ paddingLeft: 20, marginBottom: 12 }}>{delivList.map((d, i) => <li key={i} style={{ fontSize: 10, marginBottom: 3 }}>{d}</li>)}</ul>
+                : <ul style={{ paddingLeft: 20, marginBottom: 12, fontSize: 10 }}><li>Deliverables as described in services above</li><li>Final files in agreed formats (PNG, JPG, SVG, PDF)</li></ul>}
+              <div style={s.warn}>⚠ Any work not listed above is OUT OF SCOPE and will be quoted separately via written Change Order.</div>
+              {pc.specialRequirements && <><div style={s.clauseTitle}>Special Requirements</div><div style={s.clauseText}>{pc.specialRequirements}</div></>}
+
+              {/* 4. Timeline */}
+              <div style={s.h2}>4. Project Timeline</div>
+              <table style={s.tbl}>
+                <thead>
+                  <tr><th style={s.th}>Phase</th><th style={s.th}>Deliverable</th><th style={s.th}>Due</th><th style={s.th}>Payment</th></tr>
+                </thead>
+                <tbody>
+                  {[
+                    ["Phase 1 — Deposit", "Signed contract + deposit received", fmtDate(pc.startDate), `${pc.depositPercent}% — ${pc.currency} ${dep}`],
+                    ["Phase 2 — Concepts", "Initial designs / drafts", "TBD", "—"],
+                    [`Phase 3 — Revisions (${pc.revisionsIncluded})`, "Refined designs per feedback", "TBD", "—"],
+                    ["Phase 4 — Approval", "Client written sign-off", "TBD", "—"],
+                    ["Phase 5 — Delivery", "All final files delivered", pc.endDate ? fmtDate(pc.endDate) : "TBD", `${100 - pc.depositPercent}% — ${pc.currency} ${bal}`],
+                  ].map(([ph, dl, du, pay]) => (
+                    <tr key={ph}><td style={s.td}>{ph}</td><td style={s.td}>{dl}</td><td style={s.td}>{du}</td><td style={s.td}>{pay}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* 5. Revisions */}
+              <div style={s.h2}>5. Revision Policy</div>
+              <table style={s.tbl}>
+                <thead><tr><th style={s.th}>Item</th><th style={s.th}>Terms</th></tr></thead>
+                <tbody>
+                  <tr><td style={s.td}>Included Revisions</td><td style={s.td}>{pc.revisionsIncluded} rounds per deliverable</td></tr>
+                  <tr><td style={s.td}>Additional Revisions</td><td style={s.td}>{pc.currency} {pc.revisionRate} per additional round</td></tr>
+                  <tr><td style={s.td}>New Design Direction</td><td style={s.td}>Treated as a new project — re-quoted separately</td></tr>
+                </tbody>
+              </table>
+
+              {/* 6. Payment */}
+              <div style={s.h2}>6. Payment Terms</div>
+              <div style={s.payGrid}>
+                <div style={s.payBox}><div style={s.payLbl}>Deposit Due at Signing</div><div style={s.payAmt}>{pc.currency} {dep}</div><div style={s.payNote}>{pc.depositPercent}% — Work begins only after received</div></div>
+                <div style={s.payBox}><div style={s.payLbl}>Balance Due at Delivery</div><div style={s.payAmt}>{pc.currency} {bal}</div><div style={s.payNote}>{100 - pc.depositPercent}% — Paid before final files released</div></div>
+              </div>
+              <div style={s.grid}>
+                <div style={s.cell}><div style={s.lbl}>Payment Account</div><div style={s.val}>{pc.paymentAccount}</div></div>
+                <div style={s.cell}><div style={s.lbl}>Institution</div><div style={s.val}>{pc.paymentInstitution}</div></div>
+                <div style={{ ...s.cell, ...s.full }}><div style={s.lbl}>Beneficiary</div><div style={s.val}>{pc.paymentBeneficiary}</div></div>
+              </div>
+
+              {/* 7. IP */}
+              <div style={s.h2}>7. Intellectual Property</div>
+              <div style={s.badgeRow}>
+                <span style={pc.portfolioRights ? s.badgeY : s.badgeN}>{pc.portfolioRights ? "✓" : "✗"} CGY Portfolio Rights</span>
+                <span style={pc.sourceFilesIncluded ? s.badgeY : s.badgeN}>{pc.sourceFilesIncluded ? "✓" : "✗"} Source Files Included</span>
+                <span style={pc.exclusivity ? s.badgeY : s.badgeN}>{pc.exclusivity ? "✓" : "✗"} Exclusive License</span>
+              </div>
+              <div style={s.clauseTitle}>License Upon Full Payment</div>
+              <div style={s.clauseText}>{pc.licenseType} license granted to the Client upon receipt of full payment.</div>
+              <div style={s.clauseText}>All designs remain CGY's intellectual property until full payment is confirmed.</div>
+
+              {/* 8. Terms */}
+              <div style={s.h2}>8. General Terms</div>
+              {[
+                ["Cancellation", `Deposit is non-refundable if Client cancels after work begins. After concepts delivered: 75% of total rate. Near completion: 100% of total rate.`],
+                ["Late Payment", `Payments overdue by 7+ days incur GHS 50 / USD 5 per day. Final files withheld until paid in full.`],
+                ["Client Responsibilities", `Provide all content before work begins. Consolidated feedback within 5 business days of each submission. Do not share draft designs publicly before final approval.`],
+                ["Confidentiality", `Both parties keep all proprietary information confidential throughout the project.`],
+                ["Governing Law", `This Agreement is governed by the laws of Ghana. Disputes resolved by good-faith communication first, then mediation.`],
+              ].map(([title, text]) => (
+                <div key={title}><div style={s.clauseTitle}>{title}</div><div style={s.clauseText}>{text}</div></div>
+              ))}
+
+              {/* Signatures */}
+              <div style={s.h2}>Signatures &amp; Agreement</div>
+              <div style={{ fontSize: 10, color: "#555", marginBottom: 16 }}>By signing below, both parties confirm they have fully read, understood, and agreed to all terms.</div>
+              <div style={s.sigGrid}>
+                <div style={s.sigTop}>
+                  <div style={s.sigLbl}>Designer — Curio Graphics Yard</div>
+                  <img src={signUrl} alt="Signature" style={{ height: 56, width: "auto", objectFit: "contain", marginBottom: 4, display: "block" }} />
+                  <div style={s.sigFld}>Signature</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, marginBottom: 4 }}>David Amo</div>
+                  <div style={s.sigFld}>Printed Name</div>
+                  <div style={{ fontSize: 11, marginBottom: 4 }}>{new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" })}</div>
+                  <div style={s.sigFld}>Date</div>
+                </div>
+                <div style={s.sigTop}>
+                  <div style={s.sigLbl}>Client</div>
+                  <div style={s.sigLine}></div><div style={s.sigFld}>Signature</div>
+                  <div style={s.sigLine}></div><div style={s.sigFld}>Printed Name</div>
+                  <div style={s.sigLine}></div><div style={s.sigFld}>Date</div>
+                </div>
+              </div>
+              <div style={s.ftr}>
+                Curio Graphics Yard — A Creative Design Studio Amplifying Fashion and Music through Inspired Design.<br/>
+                Contract #{pc.contractNumber} • Both parties retain a signed copy for their records.
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
