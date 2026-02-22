@@ -659,7 +659,7 @@ function CGYContractManager({ userId = "" }) {
                   <input type="text" value={editing.contractNumber} onChange={set("contractNumber")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Contract Date</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Contract Date</label>
                   <input type="date" value={editing.contractDate} onChange={set("contractDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
@@ -669,15 +669,15 @@ function CGYContractManager({ userId = "" }) {
                   </select>
                 </div>
                 <div>
-                  <label className={labelCls}>Start Date</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Start Date</label>
                   <input type="date" value={editing.startDate} onChange={set("startDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
-                  <label className={labelCls}>Estimated End Date</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Estimated End Date</label>
                   <input type="date" value={editing.endDate} onChange={set("endDate")} className={inputCls} style={{ maxWidth: "100%" }} />
                 </div>
                 <div>
-                  <label className={labelCls}>Currency</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Currency</label>
                   <select value={editing.currency} onChange={set("currency")} className={inputCls}>
                     <option value="GHS">GHS — Ghanaian Cedis</option>
                     <option value="USD">USD — US Dollars</option>
