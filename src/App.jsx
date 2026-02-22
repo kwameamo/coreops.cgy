@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import CGYContractManager from './contracts';
 
 /* ─── Mode switcher: Invoice Generator ⟷ Contract Generator (shown in header after login) ─── */
-function ModeSwitcher({ mode, onModeChange }) {
+function ModeSwitcher({ mode, onModeChange, fullWidth }) {
   return (
     <div style={{
       display: "flex",
@@ -14,6 +14,7 @@ function ModeSwitcher({ mode, onModeChange }) {
       borderRadius: 10,
       padding: 3,
       gap: 2,
+      width: fullWidth ? "100%" : undefined,
     }}>
       {[
         { key: "invoice", icon: <FileText size={15} />, label: "Invoices" },
@@ -26,6 +27,7 @@ function ModeSwitcher({ mode, onModeChange }) {
           style={{
             display: "flex",
             alignItems: "center",
+            justifyContent: "center",
             gap: 6,
             padding: "7px 14px",
             borderRadius: 7,
@@ -37,6 +39,7 @@ function ModeSwitcher({ mode, onModeChange }) {
             background: mode === key ? "#ffffff" : "transparent",
             color: mode === key ? "#111827" : "#6b7280",
             boxShadow: mode === key ? "0 1px 3px rgba(0,0,0,0.12)" : "none",
+            flex: fullWidth ? 1 : undefined,
           }}
         >
           {icon}
@@ -47,10 +50,7 @@ function ModeSwitcher({ mode, onModeChange }) {
   );
 }
 
-const InvoiceGenerator = () => {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [userEmail, setUserEmail] = useState('');
-  const [userId, setUserId] = useState('');
+const InvoiceGenerator = ({ userId = '', onLogout }) => {
   const [currentView, setCurrentView] = useState('create');
   const [invoices, setInvoices] = useState([]);
   const [invoiceCounter, setInvoiceCounter] = useState(1);
@@ -71,7 +71,12 @@ const InvoiceGenerator = () => {
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const refreshIntervalRef = useRef(null);
-  const userIdRef = useRef('');
+  const userIdRef = useRef(userId);
+
+  // Keep ref in sync when prop changes
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: 'INV-2025-001',
@@ -142,26 +147,16 @@ const InvoiceGenerator = () => {
     };
   }, [currentView, refreshInvoices]);
 
+  // Load data when userId prop is provided
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        setIsAuthenticated(true);
-        setUserEmail(user.email);
-        setUserId(user.uid);
-        userIdRef.current = user.uid;
-        await loadUserData(user.uid);
-      } else {
-        setIsAuthenticated(false);
-        setUserEmail('');
-        setUserId('');
-        userIdRef.current = '';
-        setInvoices([]);
-        setIsLoading(false);
-      }
-    });
-
-    return () => unsubscribe();
-  }, []);
+    if (userId) {
+      loadUserData(userId);
+    } else {
+      setInvoices([]);
+      setIsLoading(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const loadUserData = async (uid) => {
     setIsLoading(true);
@@ -197,26 +192,7 @@ const InvoiceGenerator = () => {
     }, 4000);
   };
 
-  const handleGoogleLogin = async () => {
-    try {
-      await signInWithGoogle();
-    } catch (error) {
-      console.error('Google login error:', error);
-      showNotification('Failed to sign in with Google', 'error');
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      setInvoices([]);
-      setInvoiceCounter(1);
-      setEditingInvoiceId(null);
-      setLastRefreshed(null);
-    } catch (error) {
-      console.error('Logout error:', error);
-    }
-  };
+  // Auth is managed by App — no login/logout here
 
   // "X minutes ago" helper
   const getLastRefreshedLabel = () => {
@@ -253,38 +229,6 @@ const InvoiceGenerator = () => {
     link.click();
     URL.revokeObjectURL(url);
   };
-
-  if (!isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-4">
-        <div className="max-w-sm w-full">
-          <div className="text-center mb-8">
-            <img
-              src={logo}
-              alt="Curio Graphics Yard Logo"
-              className="mx-auto mb-6 w-24 h-auto"
-            />
-            <h1 className="text-2xl font-semibold text-gray-900 mb-1">
-              CoreOps Console v1.5
-            </h1>
-          </div>
-
-          <button
-            onClick={handleGoogleLogin}
-            className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-3 font-medium transition-colors"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
-            </svg>
-            Sign in with Google
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   if (isLoading) {
     return (
@@ -1447,16 +1391,54 @@ const InvoiceGenerator = () => {
   );
 };
 
-/* ─── Root App: login shows CGY Ops (no header); after login, header with switcher (Invoice | Contract) + Logout ─── */
+/* ─── LoginScreen — rendered by App when unauthenticated ─── */
+function LoginScreen() {
+  const handleGoogleLogin = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Google login error:', error);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-white flex items-center justify-center p-4">
+      <div className="max-w-sm w-full">
+        <div className="text-center mb-8">
+          <img src={logo} alt="Curio Graphics Yard Logo" className="mx-auto mb-6 w-24 h-auto" />
+          <h1 className="text-2xl font-semibold text-gray-900 mb-1">CoreOps Console v1.5</h1>
+        </div>
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-3 font-medium transition-colors"
+        >
+          <svg className="w-5 h-5" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+          </svg>
+          Sign in with Google
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Root App: single auth listener; passes userId down to InvoiceGenerator ─── */
 function App() {
   const [mode, setMode] = useState('invoice');
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
+  // 'loading' while Firebase resolves on startup; then 'unauthenticated' or 'authenticated'
+  const [authState, setAuthState] = useState({ status: 'loading', userId: '', userEmail: '' });
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      setIsAuthenticated(!!user);
-      if (!user) setMode('invoice');
+      if (user) {
+        setAuthState({ status: 'authenticated', userId: user.uid, userEmail: user.email });
+      } else {
+        setAuthState({ status: 'unauthenticated', userId: '', userEmail: '' });
+        setMode('invoice');
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -1464,31 +1446,41 @@ function App() {
   const handleLogout = async () => {
     try {
       await logout();
-      setMode('invoice');
     } catch (e) {
       console.error(e);
     }
   };
 
-  if (!isAuthenticated) {
-    return <InvoiceGenerator />;
+  // Spinner while Firebase figures out auth on startup — prevents double-mount
+  if (authState.status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState.status === 'unauthenticated') {
+    return <LoginScreen />;
   }
 
   return (
     <div className="app-root">
       <header className="app-switcher-header no-print">
-        <div className="app-switcher-inner">
-          <img src={logo} alt="CGY" className="app-switcher-logo" />
-          <ModeSwitcher mode={mode} onModeChange={setMode} />
+        {/* Row 1: Logo + Logout */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 50 }}>
+          <img src={logo} alt="CGY" className="app-switcher-logo" style={{ margin: 0 }} />
           <button
             type="button"
             onClick={handleLogout}
             style={{
-              marginLeft: "auto",
               display: "flex",
               alignItems: "center",
               gap: 6,
-              padding: "7px 14px",
+              padding: "6px 12px",
               borderRadius: 8,
               border: "1.5px solid #fee2e2",
               background: "transparent",
@@ -1496,17 +1488,23 @@ function App() {
               fontSize: 13,
               fontWeight: 600,
               cursor: "pointer",
+              flexShrink: 0,
             }}
           >
-            <LogOut size={15} /> Logout
+            <LogOut size={15} />
+            <span>Logout</span>
           </button>
+        </div>
+        {/* Row 2: Mode switcher — full-width */}
+        <div style={{ display: "flex", alignItems: "center", paddingBottom: 8 }}>
+          <ModeSwitcher mode={mode} onModeChange={setMode} fullWidth />
         </div>
       </header>
 
       <main className={`app-content app-content-${mode}`}>
         {mode === 'invoice' && (
           <div className="view-panel view-panel-invoice">
-            <InvoiceGenerator />
+            <InvoiceGenerator userId={authState.userId} />
           </div>
         )}
         {mode === 'contract' && (
