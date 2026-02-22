@@ -142,6 +142,13 @@ const generateContractPDF = async (contract) => {
     ? ((parseFloat(contract.agreedAmount) * (100 - contract.depositPercent)) / 100).toFixed(2)
     : "—";
 
+  // Open the window BEFORE any awaits — mobile browsers (especially iOS Safari)
+  // block window.open() if it isn't called synchronously within the user-gesture handler.
+  const win = window.open("", "_blank");
+  if (win) {
+    win.document.write("<html><head><title>Loading…</title></head><body style='font-family:sans-serif;padding:40px;text-align:center'><p>Preparing contract…</p></body></html>");
+  }
+
   const [base64Logo, base64Sign] = await Promise.all([getBase64Logo(), getBase64Sign()]);
 
   const htmlContent = `<!DOCTYPE html>
@@ -393,11 +400,12 @@ const generateContractPDF = async (contract) => {
 <script>window.onload = function() { window.print(); }</script>
 </body></html>`;
 
-  const win = window.open("", "_blank");
   if (win && !win.closed) {
+    win.document.open();
     win.document.write(htmlContent);
     win.document.close();
   } else {
+    // Popup was blocked entirely — fall back to a blob link
     const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
