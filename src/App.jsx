@@ -130,6 +130,34 @@ const blankContract = (counter, type = "graphic") => ({
 });
 
 /* ─────────────────────────────────────────────
+   PRINT UTILITY — works in iOS PWA standalone
+   Injects a hidden iframe, prints it, removes it.
+   No window.open / new tab needed.
+───────────────────────────────────────────── */
+const printViaIframe = (htmlContent) => {
+  const old = document.getElementById("__print_frame__");
+  if (old) old.remove();
+
+  const iframe = document.createElement("iframe");
+  iframe.id = "__print_frame__";
+  iframe.style.cssText = "position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;pointer-events:none;border:none;";
+  document.body.appendChild(iframe);
+
+  const doc = iframe.contentDocument || iframe.contentWindow.document;
+  doc.open();
+  doc.write(htmlContent);
+  doc.close();
+
+  iframe.contentWindow.onload = () => {
+    setTimeout(() => {
+      iframe.contentWindow.focus();
+      iframe.contentWindow.print();
+      setTimeout(() => iframe.remove(), 1000);
+    }, 300);
+  };
+};
+
+/* ─────────────────────────────────────────────
    CONTRACT PDF GENERATOR
 ───────────────────────────────────────────── */
 const generateContractPDF = async (contract) => {
@@ -141,13 +169,6 @@ const generateContractPDF = async (contract) => {
   const balanceAmt = contract.agreedAmount
     ? ((parseFloat(contract.agreedAmount) * (100 - contract.depositPercent)) / 100).toFixed(2)
     : "—";
-
-  // Open the window BEFORE any awaits — mobile browsers (especially iOS Safari)
-  // block window.open() if it isn't called synchronously within the user-gesture handler.
-  const win = window.open("", "_blank");
-  if (win) {
-    win.document.write("<html><head><title>Loading…</title></head><body style='font-family:sans-serif;padding:40px;text-align:center'><p>Preparing contract…</p></body></html>");
-  }
 
   const [base64Logo, base64Sign] = await Promise.all([getBase64Logo(), getBase64Sign()]);
 
@@ -397,26 +418,9 @@ const generateContractPDF = async (contract) => {
     Contract #${contract.contractNumber} • Both parties retain a signed copy for their records.
   </div>
 </div>
-<script>window.onload = function() { window.print(); }</script>
 </body></html>`;
 
-  if (win && !win.closed) {
-    win.document.open();
-    win.document.write(htmlContent);
-    win.document.close();
-  } else {
-    // Popup was blocked entirely — fall back to a blob link
-    const blob = new Blob([htmlContent], { type: "text/html;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.target = "_blank";
-    a.rel = "noopener noreferrer";
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 10000);
-  }
+  printViaIframe(htmlContent);
 };
 
 /* ─────────────────────────────────────────────
@@ -1849,7 +1853,13 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
   };
 
   const exportToPDF = () => {
-    window.print();
+    // Build the invoice HTML from the print-area div content
+    const printArea = document.querySelector('.print-area');
+    if (!printArea) { window.print(); return; }
+    const style = Array.from(document.querySelectorAll('style'))
+      .map(s => s.outerHTML).join('\n');
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice</title>${style}</head><body>${printArea.outerHTML}</body></html>`;
+    printViaIframe(htmlContent);
   };
 
   const generateReceipt = (invoice, paymentEntry = null) => {
@@ -1875,7 +1885,6 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
     const remainingBalance = Math.max(0, invoice.total - totalPaidSoFar);
 
-    const receiptWindow = window.open('', '_blank');
     const receiptContent = `
       <!DOCTYPE html>
       <html>
@@ -1985,13 +1994,11 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
           <div>Thank you for your business!</div>
           <div style="margin-top: 10px; font-size: 12px;">This is a computer-generated receipt and serves as proof of payment.</div>
         </div>
-        <script>window.onload = function() { window.print(); }</script>
       </body>
       </html>
     `;
 
-    receiptWindow.document.write(receiptContent);
-    receiptWindow.document.close();
+    printViaIframe(receiptContent);
   };
 
   const formatDate = (dateString) => {
