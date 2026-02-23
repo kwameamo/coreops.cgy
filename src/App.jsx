@@ -1,7 +1,7 @@
 import logo from './assets/cgy_logo_new.png';
 import signUrl from './assets/sign.png';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Plus, Trash2, Download, BarChart3, FileText, LogOut, Edit2, X, Receipt, DollarSign, CheckCircle, AlertCircle, Info, RefreshCw, Search, Calendar, FileSignature, Briefcase, Scissors, Check, Copy } from 'lucide-react';
+import { Plus, Trash2, Download, BarChart3, FileText, LogOut, Edit2, X, Receipt, DollarSign, CheckCircle, AlertCircle, Info, RefreshCw, Search, Calendar, FileSignature, Briefcase, Scissors, Check, Copy, ChevronUp } from 'lucide-react';
 import { auth, signInWithGoogle, signInWithApple, logout, getUserInvoices, saveInvoice as saveInvoiceToFirestore, deleteInvoice as deleteInvoiceFromFirestore, getUserCounter, updateUserCounter, db } from './firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { collection, doc, setDoc, deleteDoc, getDocs, query, where, getDoc } from 'firebase/firestore';
@@ -2827,8 +2827,14 @@ function LoginScreen() {
 /* ─── Root App: single auth listener; passes userId down to InvoiceGenerator ─── */
 function App() {
   const [mode, setMode] = useState('invoice');
-  // 'loading' while Firebase resolves on startup; then 'unauthenticated' or 'authenticated'
   const [authState, setAuthState] = useState({ status: 'loading', userId: '', userEmail: '' });
+  const [showScrollTop, setShowScrollTop] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setShowScrollTop(window.scrollY > 300);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -2910,6 +2916,36 @@ function App() {
           <CGYContractManager userId={authState.userId} />
         )}
       </main>
+
+      {/* Scroll to top button */}
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="no-print"
+        style={{
+          position: 'fixed',
+          bottom: 80,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          background: '#3b82f6',
+          color: '#fff',
+          border: 'none',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+          opacity: showScrollTop ? 1 : 0,
+          pointerEvents: showScrollTop ? 'auto' : 'none',
+          transform: showScrollTop ? 'translateY(0)' : 'translateY(12px)',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+        }}
+        aria-label="Scroll to top"
+      >
+        <ChevronUp size={22} />
+      </button>
     </div>
   );
 }
