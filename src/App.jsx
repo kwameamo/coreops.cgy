@@ -11,6 +11,7 @@ const logoUrl = logo;
 
 /* ─────────────────────────────────────────────
    CONTRACT: Logo/Sign base64 converters
+   (shared by BOTH invoice and contract PDF generators)
 ───────────────────────────────────────────── */
 const getBase64Logo = () => {
   return new Promise((resolve) => {
@@ -459,10 +460,11 @@ function CGYContractManager({ userId = "" }) {
       setLastRefreshed(new Date());
     } catch (err) {
       console.error("Error loading contracts:", err);
+      showNotification("Failed to load contracts. Check your connection.", "error");
     } finally {
       setIsLoadingContracts(false);
     }
-  }, []);
+  }, [showNotification]);
 
   const refreshContracts = useCallback(async (uid, showLoadingState = false) => {
     if (!uid) return;
@@ -476,10 +478,11 @@ function CGYContractManager({ userId = "" }) {
       if (showLoadingState) showNotification("Stats updated", "success");
     } catch (err) {
       console.error("Error refreshing contracts:", err);
+      if (showLoadingState) showNotification("Refresh failed. Check your connection.", "error");
     } finally {
       if (showLoadingState) setIsRefreshing(false);
     }
-  }, []);
+  }, [showNotification]);
 
   // Auto-refresh every 30s when on stats view
   useEffect(() => {
@@ -531,10 +534,22 @@ function CGYContractManager({ userId = "" }) {
   const startNew = (type) => { setEditing(blankContract(counter, type)); };
   const cancelEdit = () => { setEditing(null); };
 
+  /* ── Contract validation ── */
+  const validateContract = (contract, notify = true) => {
+    const errors = [];
+    if (!contract.clientName.trim()) errors.push("Client name is required.");
+    if (!contract.projectTitle.trim()) errors.push("Project title is required.");
+    if (!contract.agreedAmount || parseFloat(contract.agreedAmount) <= 0) errors.push("Agreed amount must be greater than zero.");
+    if (contract.servicesSelected.length === 0 && !contract.customServices.trim()) errors.push("Select at least one service or describe custom services.");
+    if (errors.length > 0) {
+      if (notify) showNotification(errors[0], "error");
+      return false;
+    }
+    return true;
+  };
+
   const saveContract = async () => {
-    if (!editing.clientName.trim()) return showNotification("Client name is required.", "error");
-    if (!editing.projectTitle.trim()) return showNotification("Project title is required.", "error");
-    if (!editing.agreedAmount) return showNotification("Agreed amount is required.", "error");
+    if (!validateContract(editing)) return;
     const updated = { ...editing, savedDate: new Date().toISOString(), userId };
     const existing = contracts.find(c => c.id === updated.id);
     try {
@@ -552,8 +567,15 @@ function CGYContractManager({ userId = "" }) {
       setEditing(null);
     } catch (err) {
       console.error("Error saving contract:", err);
-      showNotification("Error saving contract. Please try again.", "error");
+      showNotification("Error saving contract. Please check your connection and try again.", "error");
     }
+  };
+
+  /* ── Validate then export contract PDF ── */
+  const handleContractExport = async (contract) => {
+    if (!validateContract(contract)) return;
+    showNotification("Preparing PDF…", "info");
+    await generateContractPDF(contract);
   };
 
   const deleteContract = async (id) => {
@@ -718,8 +740,8 @@ function CGYContractManager({ userId = "" }) {
               <h3 className="font-semibold text-lg text-gray-900 border-b border-gray-100 pb-2">Client Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>Client Name *</label>
-                  <input type="text" placeholder="Full name" value={editing.clientName} onChange={set("clientName")} className={inputCls} />
+                  <label className={labelCls}>Client Name <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="Full name" value={editing.clientName} onChange={set("clientName")} className={`${inputCls} ${!editing.clientName.trim() ? 'border-red-200' : ''}`} />
                 </div>
                 <div>
                   <label className={labelCls}>Company / Brand</label>
@@ -738,8 +760,8 @@ function CGYContractManager({ userId = "" }) {
                   <input type="text" placeholder="Address, City, Country" value={editing.clientAddress} onChange={set("clientAddress")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Project Title *</label>
-                  <input type="text" placeholder="e.g., Logo Design for XYZ Brand" value={editing.projectTitle} onChange={set("projectTitle")} className={inputCls} />
+                  <label className={labelCls}>Project Title <span className="text-red-500">*</span></label>
+                  <input type="text" placeholder="e.g., Logo Design for XYZ Brand" value={editing.projectTitle} onChange={set("projectTitle")} className={`${inputCls} ${!editing.projectTitle.trim() ? 'border-red-200' : ''}`} />
                 </div>
               </div>
             </div>
@@ -747,8 +769,8 @@ function CGYContractManager({ userId = "" }) {
             {/* Services */}
             <div className="mb-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg text-gray-900">Services</h3>
-                <span className="text-sm text-gray-400">Select all that apply</span>
+                <h3 className="font-semibold text-lg text-gray-900">Services <span className="text-red-500">*</span></h3>
+                <span className="text-sm text-gray-400">Select at least one</span>
               </div>
               <div className="space-y-2 mb-4">
                 {typeInfo.services.map(s => {
@@ -776,8 +798,8 @@ function CGYContractManager({ userId = "" }) {
             {/* Pricing */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div>
-                <label className={labelCls}>Agreed Amount *</label>
-                <input type="number" placeholder="0.00" value={editing.agreedAmount} onChange={set("agreedAmount")} className={inputCls} />
+                <label className={labelCls}>Agreed Amount <span className="text-red-500">*</span></label>
+                <input type="number" placeholder="0.00" value={editing.agreedAmount} onChange={set("agreedAmount")} className={`${inputCls} ${!editing.agreedAmount ? 'border-red-200' : ''}`} />
               </div>
               <div>
                 <label className={labelCls}>Deposit %</label>
@@ -867,12 +889,25 @@ function CGYContractManager({ userId = "" }) {
               </div>
             </div>
 
+            {/* Validation summary banner */}
+            {(!editing.clientName.trim() || !editing.projectTitle.trim() || !editing.agreedAmount) && (
+              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-sm text-amber-800">
+                  Fields marked <span className="text-red-500 font-bold">*</span> are required before saving or exporting.
+                  {!editing.clientName.trim() && " Add a client name."}
+                  {!editing.projectTitle.trim() && " Add a project title."}
+                  {!editing.agreedAmount && " Enter the agreed amount."}
+                </p>
+              </div>
+            )}
+
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={saveContract} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">
                 {contracts.find(c => c.id === editing.id) ? "Update Contract" : "Save Contract"}
               </button>
-              <button onClick={() => generateContractPDF(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
+              <button onClick={() => handleContractExport(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
                 <Download size={20} /> Export to PDF
               </button>
             </div>
@@ -1214,7 +1249,7 @@ function CGYContractManager({ userId = "" }) {
                         <td className="text-center p-3 md:p-4">
                           <div className="flex gap-2 justify-center">
                             <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                            <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                            <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                             <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                             <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                           </div>
@@ -1248,7 +1283,7 @@ function CGYContractManager({ userId = "" }) {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                      <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                      <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                       <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                       <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                     </div>
@@ -1345,7 +1380,7 @@ function CGYContractManager({ userId = "" }) {
                       </div>
                       <div className="flex gap-2 flex-wrap">
                         <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                        <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                        <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                         <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                         <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                       </div>
@@ -1386,7 +1421,7 @@ function CGYContractManager({ userId = "" }) {
                           <td className="text-center p-3 md:p-4">
                             <div className="flex gap-2 justify-center">
                               <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                              <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                              <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                               <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                               <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                             </div>
@@ -1515,6 +1550,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
       if (showLoadingState) showNotification('Stats updated', 'success');
     } catch (error) {
       console.error('Error refreshing invoices:', error);
+      if (showLoadingState) showNotification('Refresh failed. Check your connection.', 'error');
     } finally {
       if (showLoadingState) setIsRefreshing(false);
     }
@@ -1622,9 +1658,9 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
   const validateInvoice = () => {
     if (!invoiceData.clientName.trim()) { showNotification('Client name is required.', 'error'); return false; }
     const hasValidService = invoiceData.services.some(s => s.desc.trim() !== '' && s.amount > 0);
-    if (!hasValidService) { showNotification('At least one service must have a description and amount.', 'error'); return false; }
+    if (!hasValidService) { showNotification('At least one service must have a description and a non-zero amount.', 'error'); return false; }
     const hasPaymentInfo = invoiceData.paymentMethod.trim() !== '' || invoiceData.paymentAccountNumber.trim() !== '' || invoiceData.paymentLink.trim() !== '';
-    if (!hasPaymentInfo) { showNotification('Payment information is required.', 'error'); return false; }
+    if (!hasPaymentInfo) { showNotification('Payment information is required (method or account number).', 'error'); return false; }
     if (calculateTotal() <= 0) { showNotification('Invoice total must be greater than zero.', 'error'); return false; }
     return true;
   };
@@ -1721,12 +1757,24 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
   const cancelEdit = () => { resetForm(); setEditingInvoiceId(null); };
 
-  /* ── INVOICE exportToPDF — self-contained HTML, no DOM scraping ── */
-  const exportToPDF = () => {
+  /* ── INVOICE exportToPDF ──
+     NOW ASYNC — fetches logo as base64 so the iframe has no external
+     resource dependencies at print time (same pattern as contracts).
+     This fixes mobile / iOS PWA printing where onload fires before
+     external images are resolved.
+  ── */
+  const exportToPDF = async () => {
+    if (!validateInvoice()) return;
+
+    showNotification('Preparing PDF…', 'info');
+
     const sub     = calculateSubtotal();
     const net     = calculateNetSales();
     const total   = calculateTotal();
     const balance = calculateBalance();
+
+    // Fetch logo as base64 — same as contract generator
+    const [base64Logo] = await Promise.all([getBase64Logo()]);
 
     const htmlContent = `<!DOCTYPE html>
 <html>
@@ -1762,6 +1810,10 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 <body>
   <div class="header">
     <div class="company-block">
+      ${base64Logo
+        ? `<img src="${base64Logo}" alt="Curio Graphics Yard" style="height:48px;width:auto;display:block;object-fit:contain;margin-bottom:8px;" />`
+        : ''
+      }
       <div>${invoiceData.companyName}</div>
       <div>${invoiceData.companyAddress}</div>
       <div>${invoiceData.companyCity}</div>
@@ -2070,6 +2122,11 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     return (inv.invoiceNumber || '').toLowerCase().includes(q) || (inv.clientName || '').toLowerCase().includes(q);
   });
 
+  // Derive validation state for live feedback
+  const hasValidService = invoiceData.services.some(s => s.desc.trim() !== '' && s.amount > 0);
+  const hasPaymentInfo = invoiceData.paymentMethod.trim() !== '' || invoiceData.paymentAccountNumber.trim() !== '' || invoiceData.paymentLink.trim() !== '';
+  const invoiceIsValid = invoiceData.clientName.trim() && hasValidService && hasPaymentInfo && calculateTotal() > 0;
+
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
       <style>{`
@@ -2296,8 +2353,8 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
               <div className="space-y-4 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">Client Name *</label>
-                    <input type="text" placeholder="Client Name" value={invoiceData.clientName} onChange={(e) => setInvoiceData({ ...invoiceData, clientName: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
+                    <label className="block text-sm font-medium mb-2 text-gray-700">Client Name <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="Client Name" value={invoiceData.clientName} onChange={(e) => setInvoiceData({ ...invoiceData, clientName: e.target.value })} className={`w-full border-2 px-4 py-3 rounded-lg text-base focus:outline-none transition ${!invoiceData.clientName.trim() ? 'border-red-200 focus:border-red-400' : 'border-gray-300 focus:border-blue-500'}`} />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700">Invoice Date</label>
@@ -2318,8 +2375,8 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                     <input type="text" placeholder="Address, City" value={`${invoiceData.clientAddress}${invoiceData.clientAddress && invoiceData.clientCity ? ', ' : ''}${invoiceData.clientCity}`} onChange={(e) => { const parts = e.target.value.split(',').map(s => s.trim()); setInvoiceData({ ...invoiceData, clientAddress: parts[0] || '', clientCity: parts.slice(1).join(', ') || '' }); }} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method *</label>
-                    <input type="text" placeholder="e.g., Mobile Money, Bank Transfer" value={invoiceData.paymentMethod} onChange={(e) => setInvoiceData({ ...invoiceData, paymentMethod: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
+                    <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method <span className="text-red-500">*</span></label>
+                    <input type="text" placeholder="e.g., Mobile Money, Bank Transfer" value={invoiceData.paymentMethod} onChange={(e) => setInvoiceData({ ...invoiceData, paymentMethod: e.target.value })} className={`w-full border-2 px-4 py-3 rounded-lg text-base focus:outline-none transition ${!invoiceData.paymentMethod.trim() && !invoiceData.paymentAccountNumber.trim() ? 'border-red-200 focus:border-red-400' : 'border-gray-300 focus:border-blue-500'}`} />
                   </div>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -2336,7 +2393,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold text-lg text-gray-900">Services</h3>
+                  <h3 className="font-semibold text-lg text-gray-900">Services <span className="text-red-500">*</span></h3>
                   <button onClick={addService} className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 text-sm font-medium transition shadow-sm"><Plus size={18} /> Add Service</button>
                 </div>
                 <div className="space-y-3">
@@ -2352,6 +2409,11 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                     </div>
                   ))}
                 </div>
+                {!hasValidService && (
+                  <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
+                    <AlertCircle size={12} /> Add at least one service with a description and a rate greater than zero.
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
@@ -2359,6 +2421,27 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                 <div><label className="block text-sm font-medium text-gray-700 mb-2">Tax</label><input type="number" value={invoiceData.tax} onChange={(e) => setInvoiceData({ ...invoiceData, tax: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" /></div>
                 <div><label className="block text-sm font-medium text-gray-700 mb-2">Paid</label><input type="number" value={invoiceData.paid} onChange={(e) => setInvoiceData({ ...invoiceData, paid: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" /></div>
               </div>
+
+              {/* Live total display */}
+              <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex flex-wrap gap-4 text-sm">
+                <div><span className="text-gray-500">Subtotal: </span><span className="font-semibold">GHS {calculateSubtotal().toFixed(2)}</span></div>
+                <div><span className="text-gray-500">Total: </span><span className="font-bold text-blue-700">GHS {calculateTotal().toFixed(2)}</span></div>
+                <div><span className="text-gray-500">Balance: </span><span className={`font-bold ${calculateBalance() > 0 ? 'text-orange-600' : 'text-green-600'}`}>GHS {calculateBalance().toFixed(2)}</span></div>
+              </div>
+
+              {/* Validation summary for invoice */}
+              {!invoiceIsValid && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
+                  <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-sm text-amber-800">
+                    <span className="font-semibold">Complete these before saving or exporting: </span>
+                    {!invoiceData.clientName.trim() && <span>Client name · </span>}
+                    {!hasValidService && <span>At least one service with a rate · </span>}
+                    {!hasPaymentInfo && <span>Payment method or account number · </span>}
+                    {calculateTotal() <= 0 && <span>Total must be &gt; 0</span>}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row gap-3">
                 <button onClick={saveInvoice} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">{editingInvoiceId ? 'Update Invoice' : 'Save Invoice'}</button>
@@ -2376,6 +2459,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
             <div className="print-area bg-white p-4 md:p-12 invoice-font text-xs md:text-sm">
               <div className="flex flex-col md:flex-row md:justify-between mb-6 md:mb-8 gap-4">
                 <div>
+                  <img src={logoUrl} alt="CGY" style={{ height: 40, width: "auto", objectFit: "contain", marginBottom: 8 }} />
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyName}</div>
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyAddress}</div>
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyCity}</div>
@@ -2466,7 +2550,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                   <input type="number" step="0.01" min="0.01" max={selectedInvoiceForPayment.balance || (selectedInvoiceForPayment.total - (selectedInvoiceForPayment.paid || 0))} value={paymentData.amount} onChange={(e) => setPaymentData({ ...paymentData, amount: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="Enter payment amount" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method</label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method <span className="text-red-500">*</span></label>
                   <input type="text" value={paymentData.paymentMethod} onChange={(e) => setPaymentData({ ...paymentData, paymentMethod: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="e.g., Mobile Money, Bank Transfer, Cash" />
                 </div>
                 <div>
