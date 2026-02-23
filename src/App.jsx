@@ -11,7 +11,6 @@ const logoUrl = logo;
 
 /* ─────────────────────────────────────────────
    CONTRACT: Logo/Sign base64 converters
-   (shared by BOTH invoice and contract PDF generators)
 ───────────────────────────────────────────── */
 const getBase64Logo = () => {
   return new Promise((resolve) => {
@@ -460,11 +459,10 @@ function CGYContractManager({ userId = "" }) {
       setLastRefreshed(new Date());
     } catch (err) {
       console.error("Error loading contracts:", err);
-      showNotification("Failed to load contracts. Check your connection.", "error");
     } finally {
       setIsLoadingContracts(false);
     }
-  }, [showNotification]);
+  }, []);
 
   const refreshContracts = useCallback(async (uid, showLoadingState = false) => {
     if (!uid) return;
@@ -478,11 +476,10 @@ function CGYContractManager({ userId = "" }) {
       if (showLoadingState) showNotification("Stats updated", "success");
     } catch (err) {
       console.error("Error refreshing contracts:", err);
-      if (showLoadingState) showNotification("Refresh failed. Check your connection.", "error");
     } finally {
       if (showLoadingState) setIsRefreshing(false);
     }
-  }, [showNotification]);
+  }, []);
 
   // Auto-refresh every 30s when on stats view
   useEffect(() => {
@@ -534,22 +531,10 @@ function CGYContractManager({ userId = "" }) {
   const startNew = (type) => { setEditing(blankContract(counter, type)); };
   const cancelEdit = () => { setEditing(null); };
 
-  /* ── Contract validation ── */
-  const validateContract = (contract, notify = true) => {
-    const errors = [];
-    if (!contract.clientName.trim()) errors.push("Client name is required.");
-    if (!contract.projectTitle.trim()) errors.push("Project title is required.");
-    if (!contract.agreedAmount || parseFloat(contract.agreedAmount) <= 0) errors.push("Agreed amount must be greater than zero.");
-    if (contract.servicesSelected.length === 0 && !contract.customServices.trim()) errors.push("Select at least one service or describe custom services.");
-    if (errors.length > 0) {
-      if (notify) showNotification(errors[0], "error");
-      return false;
-    }
-    return true;
-  };
-
   const saveContract = async () => {
-    if (!validateContract(editing)) return;
+    if (!editing.clientName.trim()) return showNotification("Client name is required.", "error");
+    if (!editing.projectTitle.trim()) return showNotification("Project title is required.", "error");
+    if (!editing.agreedAmount) return showNotification("Agreed amount is required.", "error");
     const updated = { ...editing, savedDate: new Date().toISOString(), userId };
     const existing = contracts.find(c => c.id === updated.id);
     try {
@@ -567,15 +552,8 @@ function CGYContractManager({ userId = "" }) {
       setEditing(null);
     } catch (err) {
       console.error("Error saving contract:", err);
-      showNotification("Error saving contract. Please check your connection and try again.", "error");
+      showNotification("Error saving contract. Please try again.", "error");
     }
-  };
-
-  /* ── Validate then export contract PDF ── */
-  const handleContractExport = async (contract) => {
-    if (!validateContract(contract)) return;
-    showNotification("Preparing PDF…", "info");
-    await generateContractPDF(contract);
   };
 
   const deleteContract = async (id) => {
@@ -740,8 +718,8 @@ function CGYContractManager({ userId = "" }) {
               <h3 className="font-semibold text-lg text-gray-900 border-b border-gray-100 pb-2">Client Information</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className={labelCls}>Client Name <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="Full name" value={editing.clientName} onChange={set("clientName")} className={`${inputCls} ${!editing.clientName.trim() ? 'border-red-200' : ''}`} />
+                  <label className={labelCls}>Client Name *</label>
+                  <input type="text" placeholder="Full name" value={editing.clientName} onChange={set("clientName")} className={inputCls} />
                 </div>
                 <div>
                   <label className={labelCls}>Company / Brand</label>
@@ -760,8 +738,8 @@ function CGYContractManager({ userId = "" }) {
                   <input type="text" placeholder="Address, City, Country" value={editing.clientAddress} onChange={set("clientAddress")} className={inputCls} />
                 </div>
                 <div>
-                  <label className={labelCls}>Project Title <span className="text-red-500">*</span></label>
-                  <input type="text" placeholder="e.g., Logo Design for XYZ Brand" value={editing.projectTitle} onChange={set("projectTitle")} className={`${inputCls} ${!editing.projectTitle.trim() ? 'border-red-200' : ''}`} />
+                  <label className={labelCls}>Project Title *</label>
+                  <input type="text" placeholder="e.g., Logo Design for XYZ Brand" value={editing.projectTitle} onChange={set("projectTitle")} className={inputCls} />
                 </div>
               </div>
             </div>
@@ -769,8 +747,8 @@ function CGYContractManager({ userId = "" }) {
             {/* Services */}
             <div className="mb-6">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-lg text-gray-900">Services <span className="text-red-500">*</span></h3>
-                <span className="text-sm text-gray-400">Select at least one</span>
+                <h3 className="font-semibold text-lg text-gray-900">Services</h3>
+                <span className="text-sm text-gray-400">Select all that apply</span>
               </div>
               <div className="space-y-2 mb-4">
                 {typeInfo.services.map(s => {
@@ -798,8 +776,8 @@ function CGYContractManager({ userId = "" }) {
             {/* Pricing */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
               <div>
-                <label className={labelCls}>Agreed Amount <span className="text-red-500">*</span></label>
-                <input type="number" placeholder="0.00" value={editing.agreedAmount} onChange={set("agreedAmount")} className={`${inputCls} ${!editing.agreedAmount ? 'border-red-200' : ''}`} />
+                <label className={labelCls}>Agreed Amount *</label>
+                <input type="number" placeholder="0.00" value={editing.agreedAmount} onChange={set("agreedAmount")} className={inputCls} />
               </div>
               <div>
                 <label className={labelCls}>Deposit %</label>
@@ -889,25 +867,12 @@ function CGYContractManager({ userId = "" }) {
               </div>
             </div>
 
-            {/* Validation summary banner */}
-            {(!editing.clientName.trim() || !editing.projectTitle.trim() || !editing.agreedAmount) && (
-              <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                <p className="text-sm text-amber-800">
-                  Fields marked <span className="text-red-500 font-bold">*</span> are required before saving or exporting.
-                  {!editing.clientName.trim() && " Add a client name."}
-                  {!editing.projectTitle.trim() && " Add a project title."}
-                  {!editing.agreedAmount && " Enter the agreed amount."}
-                </p>
-              </div>
-            )}
-
             {/* Action Buttons */}
             <div className="flex flex-col sm:flex-row gap-3">
               <button onClick={saveContract} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">
                 {contracts.find(c => c.id === editing.id) ? "Update Contract" : "Save Contract"}
               </button>
-              <button onClick={() => handleContractExport(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
+              <button onClick={() => generateContractPDF(editing)} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
                 <Download size={20} /> Export to PDF
               </button>
             </div>
@@ -1249,7 +1214,7 @@ function CGYContractManager({ userId = "" }) {
                         <td className="text-center p-3 md:p-4">
                           <div className="flex gap-2 justify-center">
                             <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                            <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                            <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                             <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                             <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                           </div>
@@ -1283,7 +1248,7 @@ function CGYContractManager({ userId = "" }) {
                     </div>
                     <div className="flex gap-2 flex-wrap">
                       <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                      <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                      <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                       <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                       <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                     </div>
@@ -1380,7 +1345,7 @@ function CGYContractManager({ userId = "" }) {
                       </div>
                       <div className="flex gap-2 flex-wrap">
                         <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                        <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
+                        <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Download size={14} /> PDF</button>
                         <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-700 px-3 py-2 rounded-lg hover:bg-gray-200 transition text-xs font-medium flex items-center gap-1 border border-gray-200"><Copy size={14} /> Copy</button>
                         <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
                       </div>
@@ -1421,7 +1386,7 @@ function CGYContractManager({ userId = "" }) {
                           <td className="text-center p-3 md:p-4">
                             <div className="flex gap-2 justify-center">
                               <button onClick={() => setEditing({ ...c })} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit"><Edit2 size={18} /></button>
-                              <button onClick={() => handleContractExport(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
+                              <button onClick={() => generateContractPDF(c)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Export PDF"><Download size={18} /></button>
                               <button onClick={() => duplicateContract(c)} className="bg-gray-100 text-gray-600 p-2.5 rounded-lg hover:bg-gray-200 transition shadow-sm border border-gray-200" title="Duplicate"><Copy size={18} /></button>
                               <button onClick={() => deleteContract(c.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete"><Trash2 size={18} /></button>
                             </div>
@@ -1504,13 +1469,17 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     notes: ''
   });
 
+  // Stats page state
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastRefreshed, setLastRefreshed] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const refreshIntervalRef = useRef(null);
   const userIdRef = useRef(userId);
 
-  useEffect(() => { userIdRef.current = userId; }, [userId]);
+  // Keep ref in sync when prop changes
+  useEffect(() => {
+    userIdRef.current = userId;
+  }, [userId]);
 
   const [invoiceData, setInvoiceData] = useState({
     invoiceNumber: 'INV-2025-001',
@@ -1527,7 +1496,9 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     orderNo: '',
     checkoutNo: '',
     purchaseDate: new Date().toISOString().split('T')[0],
-    services: [{ desc: '', unitRate: 0, count: 1, amount: 0 }],
+    services: [
+      { desc: '', unitRate: 0, count: 1, amount: 0 }
+    ],
     discount: 0,
     tax: 0,
     status: 'UNPAID',
@@ -1539,30 +1510,38 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     paymentLink: ''
   });
 
+  // Background refresh function
   const refreshInvoices = useCallback(async (uid, showLoadingState = false) => {
     if (!uid) return;
     if (showLoadingState) setIsRefreshing(true);
     try {
       const loadedInvoices = await getUserInvoices(uid);
-      const normalizedInvoices = loadedInvoices.map(inv => ({ ...inv, paymentHistory: inv.paymentHistory || [] }));
+      const normalizedInvoices = loadedInvoices.map(inv => ({
+        ...inv,
+        paymentHistory: inv.paymentHistory || []
+      }));
       setInvoices(normalizedInvoices);
       setLastRefreshed(new Date());
       if (showLoadingState) showNotification('Stats updated', 'success');
     } catch (error) {
       console.error('Error refreshing invoices:', error);
-      if (showLoadingState) showNotification('Refresh failed. Check your connection.', 'error');
     } finally {
       if (showLoadingState) setIsRefreshing(false);
     }
   }, []);
 
+  // Auto-refresh every 30s when on stats view
   useEffect(() => {
     if (currentView === 'stats' && userIdRef.current) {
+      // Refresh immediately on tab switch
       refreshInvoices(userIdRef.current, false);
+
+      // Set interval for background refresh
       refreshIntervalRef.current = setInterval(() => {
         refreshInvoices(userIdRef.current, false);
       }, 30000);
     }
+
     return () => {
       if (refreshIntervalRef.current) {
         clearInterval(refreshIntervalRef.current);
@@ -1571,9 +1550,14 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     };
   }, [currentView, refreshInvoices]);
 
+  // Load data when userId prop is provided
   useEffect(() => {
-    if (userId) { loadUserData(userId); }
-    else { setInvoices([]); setIsLoading(false); }
+    if (userId) {
+      loadUserData(userId);
+    } else {
+      setInvoices([]);
+      setIsLoading(false);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId]);
 
@@ -1581,12 +1565,20 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     setIsLoading(true);
     try {
       const loadedInvoices = await getUserInvoices(uid);
-      const normalizedInvoices = loadedInvoices.map(inv => ({ ...inv, paymentHistory: inv.paymentHistory || [] }));
+      const normalizedInvoices = loadedInvoices.map(inv => ({
+        ...inv,
+        paymentHistory: inv.paymentHistory || []
+      }));
       setInvoices(normalizedInvoices);
       setLastRefreshed(new Date());
+
       const loadedCounter = await getUserCounter(uid);
       setInvoiceCounter(loadedCounter);
-      setInvoiceData(prev => ({ ...prev, invoiceNumber: `INV-2025-${String(loadedCounter).padStart(3, '0')}` }));
+
+      setInvoiceData(prev => ({
+        ...prev,
+        invoiceNumber: `INV-2025-${String(loadedCounter).padStart(3, '0')}`
+      }));
     } catch (error) {
       console.error('Error loading user data:', error);
       setInvoices([]);
@@ -1598,9 +1590,14 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
   const showNotification = (message, type = 'info') => {
     setNotification({ show: true, message, type });
-    setTimeout(() => setNotification({ show: false, message: '', type: 'info' }), 4000);
+    setTimeout(() => {
+      setNotification({ show: false, message: '', type: 'info' });
+    }, 4000);
   };
 
+  // Auth is managed by App — no login/logout here
+
+  // "X minutes ago" helper
   const getLastRefreshedLabel = () => {
     if (!lastRefreshed) return '';
     const diffMs = Date.now() - lastRefreshed.getTime();
@@ -1610,20 +1607,28 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     return `Updated ${diffMins}m ago`;
   };
 
+  // CSV export
   const exportToCSV = (invoiceList) => {
     const headers = ['Invoice #', 'Date', 'Client', 'Total (GHS)', 'Balance (GHS)', 'Status'];
     const rows = invoiceList.map(inv => [
-      inv.invoiceNumber, formatDate(inv.invoiceDate), inv.clientName || 'N/A',
-      Number(inv.total || 0).toFixed(2), Number(inv.balance || 0).toFixed(2), inv.status
+      inv.invoiceNumber,
+      formatDate(inv.invoiceDate),
+      inv.clientName || 'N/A',
+      Number(inv.total || 0).toFixed(2),
+      Number(inv.balance || 0).toFixed(2),
+      inv.status
     ]);
+
     const csvContent = [headers, ...rows]
       .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
       .join('\n');
+
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `invoices-${new Date().toISOString().split('T')[0]}.csv`;
+    const today = new Date().toISOString().split('T')[0];
+    link.download = `invoices-${today}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -1639,61 +1644,123 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
     );
   }
 
-  const calculateSubtotal = () => invoiceData.services.reduce((sum, s) => sum + (s.amount || 0), 0);
-  const calculateNetSales = () => calculateSubtotal() - invoiceData.discount;
-  const calculateTotal = () => calculateNetSales() + invoiceData.tax;
-  const calculateBalance = () => calculateTotal() - invoiceData.paid;
+  const calculateSubtotal = () => {
+    return invoiceData.services.reduce((sum, service) => sum + (service.amount || 0), 0);
+  };
 
-  const addService = () => setInvoiceData({ ...invoiceData, services: [...invoiceData.services, { desc: '', unitRate: 0, count: 1, amount: 0 }] });
-  const removeService = (index) => setInvoiceData({ ...invoiceData, services: invoiceData.services.filter((_, i) => i !== index) });
+  const calculateNetSales = () => {
+    return calculateSubtotal() - invoiceData.discount;
+  };
+
+  const calculateTotal = () => {
+    return calculateNetSales() + invoiceData.tax;
+  };
+
+  const calculateBalance = () => {
+    return calculateTotal() - invoiceData.paid;
+  };
+
+  const addService = () => {
+    setInvoiceData({
+      ...invoiceData,
+      services: [...invoiceData.services, { desc: '', unitRate: 0, count: 1, amount: 0 }]
+    });
+  };
+
+  const removeService = (index) => {
+    const newServices = invoiceData.services.filter((_, i) => i !== index);
+    setInvoiceData({ ...invoiceData, services: newServices });
+  };
+
   const updateService = (index, field, value) => {
     const newServices = [...invoiceData.services];
     newServices[index][field] = value;
+
     if (field === 'unitRate' || field === 'count') {
       newServices[index].amount = (newServices[index].unitRate || 0) * (newServices[index].count || 0);
     }
+
     setInvoiceData({ ...invoiceData, services: newServices });
   };
 
   const validateInvoice = () => {
-    if (!invoiceData.clientName.trim()) { showNotification('Client name is required.', 'error'); return false; }
-    const hasValidService = invoiceData.services.some(s => s.desc.trim() !== '' && s.amount > 0);
-    if (!hasValidService) { showNotification('At least one service must have a description and a non-zero amount.', 'error'); return false; }
-    const hasPaymentInfo = invoiceData.paymentMethod.trim() !== '' || invoiceData.paymentAccountNumber.trim() !== '' || invoiceData.paymentLink.trim() !== '';
-    if (!hasPaymentInfo) { showNotification('Payment information is required (method or account number).', 'error'); return false; }
-    if (calculateTotal() <= 0) { showNotification('Invoice total must be greater than zero.', 'error'); return false; }
+    if (!invoiceData.clientName.trim()) {
+      showNotification('Client name is required.', 'error');
+      return false;
+    }
+
+    const hasValidService = invoiceData.services.some(service =>
+      service.desc.trim() !== '' && service.amount > 0
+    );
+
+    if (!hasValidService) {
+      showNotification('At least one service must have a description and amount.', 'error');
+      return false;
+    }
+
+    const hasPaymentInfo =
+      invoiceData.paymentMethod.trim() !== '' ||
+      invoiceData.paymentAccountNumber.trim() !== '' ||
+      invoiceData.paymentLink.trim() !== '';
+
+    if (!hasPaymentInfo) {
+      showNotification('Payment information is required.', 'error');
+      return false;
+    }
+
+    if (calculateTotal() <= 0) {
+      showNotification('Invoice total must be greater than zero.', 'error');
+      return false;
+    }
+
     return true;
   };
 
   const saveInvoice = async () => {
     if (!validateInvoice()) return;
-    const cleanedServices = invoiceData.services.filter(s => s.desc.trim() !== '' && s.amount > 0);
+
+    const cleanedServices = invoiceData.services.filter(
+      service => service.desc.trim() !== '' && service.amount > 0
+    );
+
+    const finalStatus = invoiceData.status || 'UNPAID';
+
     const invoiceToSave = {
       id: editingInvoiceId || `inv-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       ...invoiceData,
       services: cleanedServices,
-      status: invoiceData.status || 'UNPAID',
+      status: finalStatus,
       subtotal: calculateSubtotal(),
       netSales: calculateNetSales(),
       total: calculateTotal(),
       balance: calculateBalance(),
       savedDate: new Date().toISOString(),
-      userId,
+      userId: userId,
       paymentHistory: invoiceData.paymentHistory || []
     };
+
     try {
       await saveInvoiceToFirestore(invoiceToSave);
+
+      let updatedInvoices;
+
       if (editingInvoiceId) {
-        setInvoices(invoices.map(inv => inv.id === editingInvoiceId ? invoiceToSave : inv));
+        updatedInvoices = invoices.map(inv =>
+          inv.id === editingInvoiceId ? invoiceToSave : inv
+        );
         setEditingInvoiceId(null);
         showNotification('Invoice updated successfully!', 'success');
       } else {
-        setInvoices([...invoices, invoiceToSave]);
+        updatedInvoices = [...invoices, invoiceToSave];
+
         const newCounter = invoiceCounter + 1;
         await updateUserCounter(userId, newCounter);
         setInvoiceCounter(newCounter);
+
         showNotification('Invoice saved successfully!', 'success');
       }
+
+      setInvoices(updatedInvoices);
       resetForm();
     } catch (error) {
       console.error('Error saving invoice:', error);
@@ -1709,11 +1776,20 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
       companyAddress: 'Koforidua, E7-0979-957',
       companyCity: 'Ghana',
       companyEmail: 'curiographicsyard@gmail.com',
-      clientName: '', clientAddress: '', clientCity: '', clientPO: '', clientVAT: '',
-      orderNo: '', checkoutNo: '',
+      clientName: '',
+      clientAddress: '',
+      clientCity: '',
+      clientPO: '',
+      clientVAT: '',
+      orderNo: '',
+      checkoutNo: '',
       purchaseDate: new Date().toISOString().split('T')[0],
       services: [{ desc: '', unitRate: 0, count: 1, amount: 0 }],
-      discount: 0, tax: 0, status: 'UNPAID', paymentMethod: '', paid: 0,
+      discount: 0,
+      tax: 0,
+      status: 'UNPAID',
+      paymentMethod: '',
+      paid: 0,
       paymentAccountNumber: invoiceData.paymentAccountNumber,
       paymentInstitution: invoiceData.paymentInstitution,
       paymentBeneficiary: invoiceData.paymentBeneficiary,
@@ -1725,15 +1801,26 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
   const editInvoice = (invoice) => {
     setInvoiceData({
-      invoiceNumber: invoice.invoiceNumber, invoiceDate: invoice.invoiceDate,
-      companyName: invoice.companyName, companyAddress: invoice.companyAddress,
-      companyCity: invoice.companyCity, companyEmail: invoice.companyEmail,
-      clientName: invoice.clientName, clientAddress: invoice.clientAddress,
-      clientCity: invoice.clientCity, clientPO: invoice.clientPO,
-      clientVAT: invoice.clientVAT, orderNo: invoice.orderNo,
-      checkoutNo: invoice.checkoutNo, purchaseDate: invoice.purchaseDate,
-      services: invoice.services, discount: invoice.discount, tax: invoice.tax,
-      status: invoice.status, paymentMethod: invoice.paymentMethod, paid: invoice.paid,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceDate: invoice.invoiceDate,
+      companyName: invoice.companyName,
+      companyAddress: invoice.companyAddress,
+      companyCity: invoice.companyCity,
+      companyEmail: invoice.companyEmail,
+      clientName: invoice.clientName,
+      clientAddress: invoice.clientAddress,
+      clientCity: invoice.clientCity,
+      clientPO: invoice.clientPO,
+      clientVAT: invoice.clientVAT,
+      orderNo: invoice.orderNo,
+      checkoutNo: invoice.checkoutNo,
+      purchaseDate: invoice.purchaseDate,
+      services: invoice.services,
+      discount: invoice.discount,
+      tax: invoice.tax,
+      status: invoice.status,
+      paymentMethod: invoice.paymentMethod,
+      paid: invoice.paid,
       paymentAccountNumber: invoice.paymentAccountNumber,
       paymentInstitution: invoice.paymentInstitution,
       paymentBeneficiary: invoice.paymentBeneficiary,
@@ -1745,167 +1832,33 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
   };
 
   const deleteInvoice = async (invoiceId) => {
-    if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to delete this invoice? This action cannot be undone.')) {
+      return;
+    }
+
     try {
       await deleteInvoiceFromFirestore(invoiceId);
-      setInvoices(invoices.filter(inv => inv.id !== invoiceId));
+      const updatedInvoices = invoices.filter(inv => inv.id !== invoiceId);
+      setInvoices(updatedInvoices);
       showNotification('Invoice deleted successfully!', 'success');
     } catch (error) {
+      console.error('Error deleting invoice:', error);
       showNotification('Error deleting invoice. Please try again.', 'error');
     }
   };
 
-  const cancelEdit = () => { resetForm(); setEditingInvoiceId(null); };
+  const cancelEdit = () => {
+    resetForm();
+    setEditingInvoiceId(null);
+  };
 
-  /* ── INVOICE exportToPDF ──
-     NOW ASYNC — fetches logo as base64 so the iframe has no external
-     resource dependencies at print time (same pattern as contracts).
-     This fixes mobile / iOS PWA printing where onload fires before
-     external images are resolved.
-  ── */
-  const exportToPDF = async () => {
-    if (!validateInvoice()) return;
-
-    showNotification('Preparing PDF…', 'info');
-
-    const sub     = calculateSubtotal();
-    const net     = calculateNetSales();
-    const total   = calculateTotal();
-    const balance = calculateBalance();
-
-    // Fetch logo as base64 — same as contract generator
-    const [base64Logo] = await Promise.all([getBase64Logo()]);
-
-    const htmlContent = `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="UTF-8">
-  <title>Invoice ${invoiceData.invoiceNumber}</title>
-  <style>
-    @import url('https://fonts.cdnfonts.com/css/ocr-a-extended');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: 'OCR A Extended', monospace; font-size: 11pt; color: #111; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; }
-    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 32px; }
-    .company-block { font-size: 10pt; }
-    .invoice-badge { border: 2px solid #000; padding: 8px 14px; font-size: 10pt; white-space: nowrap; }
-    .section { margin-bottom: 24px; font-size: 10pt; }
-    .label { font-weight: bold; margin-bottom: 6px; }
-    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 10pt; }
-    thead tr { border-bottom: 2px solid #000; }
-    tbody tr { border-bottom: 1px solid #ccc; }
-    th { text-align: left; padding: 6px 4px; font-size: 9pt; }
-    td { padding: 6px 4px; }
-    td.right, th.right { text-align: right; }
-    .totals { display: flex; justify-content: flex-end; margin: 16px 0; }
-    .totals-inner { width: 260px; font-size: 10pt; }
-    .totals-row { display: flex; justify-content: space-between; border-bottom: 1px solid #ccc; padding: 4px 0; }
-    .totals-row.double { border-bottom: 3px double #000; }
-    .totals-row.bold { font-weight: bold; }
-    .status-line { text-align: center; border-bottom: 3px double #000; border-top: 3px double #000; padding: 8px; margin: 16px 0; font-size: 10pt; }
-    .payment-section { font-size: 10pt; margin-top: 16px; }
-    .footer { text-align: center; margin-top: 40px; font-size: 10pt; }
-    @media print { body { padding: 24px; } }
-  </style>
-</head>
-<body>
-  <div class="header">
-    <div class="company-block">
-      ${base64Logo
-        ? `<img src="${base64Logo}" alt="Curio Graphics Yard" style="height:48px;width:auto;display:block;object-fit:contain;margin-bottom:8px;" />`
-        : ''
-      }
-      <div>${invoiceData.companyName}</div>
-      <div>${invoiceData.companyAddress}</div>
-      <div>${invoiceData.companyCity}</div>
-      <div>${invoiceData.companyEmail}</div>
-    </div>
-    <div class="invoice-badge">
-      <div>Invoice #:&nbsp;&nbsp;&nbsp;&nbsp; ${invoiceData.invoiceNumber}</div>
-      <div>Invoice Date: ${formatDate(invoiceData.invoiceDate)}</div>
-    </div>
-  </div>
-
-  <div class="section">
-    <div class="label">Billed To:</div>
-    <div>${invoiceData.clientName || ''}</div>
-    ${invoiceData.clientAddress ? `<div>${invoiceData.clientAddress}</div>` : ''}
-    ${invoiceData.clientCity    ? `<div>${invoiceData.clientCity}</div>`    : ''}
-    ${invoiceData.clientPO      ? `<div>P.O. No. ${invoiceData.clientPO}</div>` : ''}
-    ${invoiceData.clientVAT     ? `<div>VAT ID ${invoiceData.clientVAT}</div>`  : ''}
-  </div>
-
-  <div class="section">
-    ${invoiceData.orderNo    ? `<div>Order No.:&nbsp;&nbsp;&nbsp;&nbsp; ${invoiceData.orderNo}</div>`    : ''}
-    ${invoiceData.checkoutNo ? `<div>Checkout No.: ${invoiceData.checkoutNo}</div>` : ''}
-    <div>Purchase Date: ${formatDate(invoiceData.purchaseDate)}</div>
-  </div>
-
-  ${invoiceData.orderNo ? `<div style="text-align:center;margin-bottom:8px;font-size:10pt;">Order ${invoiceData.orderNo}</div>` : ''}
-
-  <table>
-    <thead>
-      <tr>
-        <th>#</th>
-        <th>Services</th>
-        <th class="right">Unit Rate</th>
-        <th class="right">Count</th>
-        <th class="right">Subtotal (GHS)</th>
-      </tr>
-    </thead>
-    <tbody>
-      ${invoiceData.services.map((s, i) => `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${s.desc}</td>
-        <td class="right">${s.unitRate.toFixed(2)}</td>
-        <td class="right">${s.count}</td>
-        <td class="right">${s.amount.toFixed(2)}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-
-  <div class="totals">
-    <div class="totals-inner">
-      <div class="totals-row"><span>Subtotal</span><span>${sub.toFixed(2)}</span></div>
-      <div class="totals-row"><span>Discount</span><span>-${invoiceData.discount.toFixed(2)}</span></div>
-      <div class="totals-row"><span>Net Sales Total</span><span>${net.toFixed(2)}</span></div>
-      <div class="totals-row double"><span>Tax</span><span>${invoiceData.tax.toFixed(2)}</span></div>
-      <div class="totals-row double bold"><span>Total</span><span>${total.toFixed(2)}</span></div>
-    </div>
-  </div>
-
-  <div class="status-line">Invoice Status: ${invoiceData.status}</div>
-
-  <div class="totals">
-    <div class="totals-inner">
-      <div class="totals-row"><span>Paid</span><span>-${invoiceData.paid.toFixed(2)}</span></div>
-      <div class="totals-row bold"><span>Balance</span><span>${balance.toFixed(2)}</span></div>
-    </div>
-  </div>
-
-  ${invoiceData.paymentMethod ? `<div class="payment-section">Payment Method: ${invoiceData.paymentMethod}</div>` : ''}
-
-  ${(invoiceData.paymentAccountNumber || invoiceData.paymentLink) ? `
-  <div class="payment-section" style="margin-top:12px;">
-    <div class="label">Payment Information:</div>
-    ${invoiceData.paymentAccountNumber ? `
-      <div>Account #: ${invoiceData.paymentAccountNumber}</div>
-      ${invoiceData.paymentInstitution ? `<div>Institution: ${invoiceData.paymentInstitution}</div>` : ''}
-      ${invoiceData.paymentBeneficiary ? `<div>Beneficiary: ${invoiceData.paymentBeneficiary}</div>` : ''}
-    ` : ''}
-    ${invoiceData.paymentLink ? `
-      <div style="margin-top:6px;">or use the link below to pay:</div>
-      <div style="color:#2563eb;text-decoration:underline;word-break:break-all;">${invoiceData.paymentLink}</div>
-    ` : ''}
-  </div>` : ''}
-
-  <div class="footer">
-    <div>***</div>
-    <div>Thank you for your business.</div>
-  </div>
-</body>
-</html>`;
-
+  const exportToPDF = () => {
+    // Build the invoice HTML from the print-area div content
+    const printArea = document.querySelector('.print-area');
+    if (!printArea) { window.print(); return; }
+    const style = Array.from(document.querySelectorAll('style'))
+      .map(s => s.outerHTML).join('\n');
+    const htmlContent = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Invoice</title>${style}</head><body>${printArea.outerHTML}</body></html>`;
     printViaIframe(htmlContent);
   };
 
@@ -1923,118 +1876,127 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
         ? invoice.paymentHistory.reduce((sum, p) => sum + p.amount, 0)
         : invoice.paid || 0;
     } else {
-      totalPaidSoFar = invoice.status === 'PAID' ? invoice.total : (invoice.paid || 0);
+      if (invoice.status === 'PAID') {
+        totalPaidSoFar = invoice.total;
+      } else {
+        totalPaidSoFar = invoice.paid || 0;
+      }
     }
+
     const remainingBalance = Math.max(0, invoice.total - totalPaidSoFar);
 
-    const receiptContent = `<!DOCTYPE html>
-<html>
-<head>
-  <title>Receipt - ${receiptNumber}</title>
-  <style>
-    @import url('https://fonts.cdnfonts.com/css/ocr-a-extended');
-    body { font-family: 'OCR A Extended', monospace; padding: 40px; max-width: 800px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
-    @media (max-width: 768px) { body { padding: 20px; font-size: 11px; } .receipt-title { font-size: 18px !important; } .payment-status { font-size: 14px !important; padding: 10px !important; } .items-table th, .items-table td { padding: 6px !important; font-size: 10px !important; } .total-row.grand-total { font-size: 14px !important; } }
-    .receipt-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
-    .receipt-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
-    .company-info { margin-bottom: 30px; }
-    .section { margin-bottom: 20px; }
-    .section-title { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 5px; }
-    .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
-    .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
-    .items-table th, .items-table td { border: 1px solid #000; padding: 8px; text-align: left; }
-    .items-table th { background-color: #f0f0f0; }
-    .items-table td.number { text-align: right; }
-    .totals { margin-top: 30px; border-top: 2px solid #000; padding-top: 20px; }
-    .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
-    .total-row.grand-total { font-weight: bold; font-size: 18px; border-top: 2px double #000; padding-top: 10px; margin-top: 10px; }
-    .payment-status { text-align: center; margin: 30px 0; padding: 15px; background-color: ${isPartialPayment ? '#fff3cd' : '#d4edda'}; border: 2px solid ${isPartialPayment ? '#ffc107' : '#28a745'}; font-weight: bold; font-size: 18px; }
-    .payment-info { margin-top: 30px; border: 1px solid #000; padding: 15px; }
-    .balance-info { margin-top: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #000; }
-    .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #000; }
-    @media print { body { padding: 20px; } }
-  </style>
-</head>
-<body>
-  <div class="receipt-header">
-    <div class="receipt-title">RECEIPT</div>
-    <div>Receipt #: ${receiptNumber}</div>
-    <div>Date: ${formatDate(receiptDate)}</div>
-    ${isPartialPayment ? `<div style="margin-top: 10px; font-size: 12px; color: #666;">For Invoice: ${invoice.invoiceNumber}</div>` : ''}
-  </div>
-  <div class="company-info">
-    <div><strong>${invoice.companyName}</strong></div>
-    <div>${invoice.companyAddress}</div>
-    <div>${invoice.companyCity}</div>
-    <div>${invoice.companyEmail}</div>
-  </div>
-  <div class="section">
-    <div class="section-title">Customer Information</div>
-    <div>${invoice.clientName || 'N/A'}</div>
-    <div>${invoice.clientAddress || ''}</div>
-    <div>${invoice.clientCity || ''}</div>
-    ${invoice.clientPO ? `<div>P.O. No: ${invoice.clientPO}</div>` : ''}
-    ${invoice.clientVAT ? `<div>VAT ID: ${invoice.clientVAT}</div>` : ''}
-  </div>
-  ${isPartialPayment ? `
-  <div class="section">
-    <div class="section-title">Invoice Summary</div>
-    <div>Invoice #: ${invoice.invoiceNumber}</div>
-    <div>Invoice Date: ${formatDate(invoice.invoiceDate)}</div>
-    <div>Invoice Total: GHS ${invoice.total.toFixed(2)}</div>
-  </div>
-  ` : `
-  <div class="section">
-    <div class="section-title">Order Details</div>
-    ${invoice.orderNo ? `<div>Order No: ${invoice.orderNo}</div>` : ''}
-    ${invoice.checkoutNo ? `<div>Checkout No: ${invoice.checkoutNo}</div>` : ''}
-    <div>Purchase Date: ${formatDate(invoice.purchaseDate)}</div>
-  </div>
-  <table class="items-table">
-    <thead><tr><th>#</th><th>Description</th><th>Unit Rate (GHS)</th><th>Quantity</th><th>Amount (GHS)</th></tr></thead>
-    <tbody>
-      ${invoice.services.map((service, index) => `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${service.desc}</td>
-        <td class="number">${service.unitRate.toFixed(2)}</td>
-        <td class="number">${service.count}</td>
-        <td class="number">${service.amount.toFixed(2)}</td>
-      </tr>`).join('')}
-    </tbody>
-  </table>
-  <div class="totals">
-    <div class="total-row"><span>Subtotal:</span><span>GHS ${invoice.subtotal.toFixed(2)}</span></div>
-    ${invoice.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>- GHS ${invoice.discount.toFixed(2)}</span></div>` : ''}
-    <div class="total-row"><span>Net Sales:</span><span>GHS ${invoice.netSales.toFixed(2)}</span></div>
-    ${invoice.tax > 0 ? `<div class="total-row"><span>Tax:</span><span>GHS ${invoice.tax.toFixed(2)}</span></div>` : ''}
-    <div class="total-row grand-total"><span>Invoice Total:</span><span>GHS ${invoice.total.toFixed(2)}</span></div>
-  </div>
-  `}
-  <div class="payment-status">
-    ${isPartialPayment ? `✓ PARTIAL PAYMENT RECEIVED - GHS ${receiptAmount.toFixed(2)}` : '✓ PAYMENT RECEIVED - PAID IN FULL'}
-  </div>
-  <div class="payment-info">
-    <div><strong>Payment Information:</strong></div>
-    <div>Payment Method: ${isPartialPayment ? paymentEntry.paymentMethod : (invoice.paymentMethod || 'N/A')}</div>
-    <div>Amount Paid: GHS ${receiptAmount.toFixed(2)}</div>
-    <div>Payment Date: ${formatDate(receiptDate)}</div>
-    ${isPartialPayment && paymentEntry.notes ? `<div>Notes: ${paymentEntry.notes}</div>` : ''}
-  </div>
-  ${isPartialPayment ? `
-  <div class="balance-info">
-    <div><strong>Payment Summary:</strong></div>
-    <div>Total Paid to Date: GHS ${totalPaidSoFar.toFixed(2)}</div>
-    <div>Remaining Balance: GHS ${remainingBalance.toFixed(2)}</div>
-  </div>
-  ` : ''}
-  <div class="footer">
-    <div>***</div>
-    <div>Thank you for your business!</div>
-    <div style="margin-top: 10px; font-size: 12px;">This is a computer-generated receipt and serves as proof of payment.</div>
-  </div>
-</body>
-</html>`;
+    const receiptContent = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Receipt - ${receiptNumber}</title>
+        <link href="https://fonts.cdnfonts.com/css/ocr-a-extended" rel="stylesheet">
+        <style>
+          @import url('https://fonts.cdnfonts.com/css/ocr-a-extended');
+          body { font-family: 'OCR A Extended', monospace; padding: 40px; max-width: 800px; margin: 0 auto; font-size: 14px; line-height: 1.6; }
+          @media (max-width: 768px) { body { padding: 20px; font-size: 11px; } .receipt-title { font-size: 18px !important; } .payment-status { font-size: 14px !important; padding: 10px !important; } .items-table th, .items-table td { padding: 6px !important; font-size: 10px !important; } .total-row.grand-total { font-size: 14px !important; } }
+          .receipt-header { text-align: center; margin-bottom: 30px; border-bottom: 2px solid #000; padding-bottom: 20px; }
+          .receipt-title { font-size: 24px; font-weight: bold; margin-bottom: 10px; }
+          .company-info { margin-bottom: 30px; }
+          .section { margin-bottom: 20px; }
+          .section-title { font-weight: bold; margin-bottom: 10px; border-bottom: 1px solid #000; padding-bottom: 5px; }
+          .info-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+          .items-table { width: 100%; border-collapse: collapse; margin: 20px 0; }
+          .items-table th, .items-table td { border: 1px solid #000; padding: 8px; text-align: left; }
+          .items-table th { background-color: #f0f0f0; }
+          .items-table td.number { text-align: right; }
+          .totals { margin-top: 30px; border-top: 2px solid #000; padding-top: 20px; }
+          .total-row { display: flex; justify-content: space-between; margin-bottom: 10px; }
+          .total-row.grand-total { font-weight: bold; font-size: 18px; border-top: 2px double #000; padding-top: 10px; margin-top: 10px; }
+          .payment-status { text-align: center; margin: 30px 0; padding: 15px; background-color: ${isPartialPayment ? '#fff3cd' : '#d4edda'}; border: 2px solid ${isPartialPayment ? '#ffc107' : '#28a745'}; font-weight: bold; font-size: 18px; }
+          .payment-info { margin-top: 30px; border: 1px solid #000; padding: 15px; }
+          .balance-info { margin-top: 20px; padding: 15px; background-color: #f8f9fa; border: 1px solid #000; }
+          .footer { text-align: center; margin-top: 40px; padding-top: 20px; border-top: 2px solid #000; }
+          @media print { body { padding: 20px; } }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-header">
+          <div class="receipt-title">RECEIPT</div>
+          <div>Receipt #: ${receiptNumber}</div>
+          <div>Date: ${formatDate(receiptDate)}</div>
+          ${isPartialPayment ? `<div style="margin-top: 10px; font-size: 12px; color: #666;">For Invoice: ${invoice.invoiceNumber}</div>` : ''}
+        </div>
+        <div class="company-info">
+          <div><strong>${invoice.companyName}</strong></div>
+          <div>${invoice.companyAddress}</div>
+          <div>${invoice.companyCity}</div>
+          <div>${invoice.companyEmail}</div>
+        </div>
+        <div class="section">
+          <div class="section-title">Customer Information</div>
+          <div>${invoice.clientName || 'N/A'}</div>
+          <div>${invoice.clientAddress || ''}</div>
+          <div>${invoice.clientCity || ''}</div>
+          ${invoice.clientPO ? `<div>P.O. No: ${invoice.clientPO}</div>` : ''}
+          ${invoice.clientVAT ? `<div>VAT ID: ${invoice.clientVAT}</div>` : ''}
+        </div>
+        ${isPartialPayment ? `
+          <div class="section">
+            <div class="section-title">Invoice Summary</div>
+            <div>Invoice #: ${invoice.invoiceNumber}</div>
+            <div>Invoice Date: ${formatDate(invoice.invoiceDate)}</div>
+            <div>Invoice Total: GHS ${invoice.total.toFixed(2)}</div>
+          </div>
+        ` : `
+          <div class="section">
+            <div class="section-title">Order Details</div>
+            ${invoice.orderNo ? `<div>Order No: ${invoice.orderNo}</div>` : ''}
+            ${invoice.checkoutNo ? `<div>Checkout No: ${invoice.checkoutNo}</div>` : ''}
+            <div>Purchase Date: ${formatDate(invoice.purchaseDate)}</div>
+          </div>
+          <table class="items-table">
+            <thead><tr><th>#</th><th>Description</th><th>Unit Rate (GHS)</th><th>Quantity</th><th>Amount (GHS)</th></tr></thead>
+            <tbody>
+              ${invoice.services.map((service, index) => `
+                <tr>
+                  <td>${index + 1}</td>
+                  <td>${service.desc}</td>
+                  <td class="number">${service.unitRate.toFixed(2)}</td>
+                  <td class="number">${service.count}</td>
+                  <td class="number">${service.amount.toFixed(2)}</td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+          <div class="totals">
+            <div class="total-row"><span>Subtotal:</span><span>GHS ${invoice.subtotal.toFixed(2)}</span></div>
+            ${invoice.discount > 0 ? `<div class="total-row"><span>Discount:</span><span>- GHS ${invoice.discount.toFixed(2)}</span></div>` : ''}
+            <div class="total-row"><span>Net Sales:</span><span>GHS ${invoice.netSales.toFixed(2)}</span></div>
+            ${invoice.tax > 0 ? `<div class="total-row"><span>Tax:</span><span>GHS ${invoice.tax.toFixed(2)}</span></div>` : ''}
+            <div class="total-row grand-total"><span>Invoice Total:</span><span>GHS ${invoice.total.toFixed(2)}</span></div>
+          </div>
+        `}
+        <div class="payment-status">
+          ${isPartialPayment ? `✓ PARTIAL PAYMENT RECEIVED - GHS ${receiptAmount.toFixed(2)}` : '✓ PAYMENT RECEIVED - PAID IN FULL'}
+        </div>
+        <div class="payment-info">
+          <div><strong>Payment Information:</strong></div>
+          <div>Payment Method: ${isPartialPayment ? paymentEntry.paymentMethod : (invoice.paymentMethod || 'N/A')}</div>
+          <div>Amount Paid: GHS ${receiptAmount.toFixed(2)}</div>
+          <div>Payment Date: ${formatDate(receiptDate)}</div>
+          ${isPartialPayment && paymentEntry.notes ? `<div>Notes: ${paymentEntry.notes}</div>` : ''}
+        </div>
+        ${isPartialPayment ? `
+          <div class="balance-info">
+            <div><strong>Payment Summary:</strong></div>
+            <div>Total Paid to Date: GHS ${totalPaidSoFar.toFixed(2)}</div>
+            <div>Remaining Balance: GHS ${remainingBalance.toFixed(2)}</div>
+          </div>
+        ` : ''}
+        <div class="footer">
+          <div>***</div>
+          <div>Thank you for your business!</div>
+          <div style="margin-top: 10px; font-size: 12px;">This is a computer-generated receipt and serves as proof of payment.</div>
+        </div>
+      </body>
+      </html>
+    `;
 
     printViaIframe(receiptContent);
   };
@@ -2046,23 +2008,45 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
   const openPaymentModal = (invoice) => {
     setSelectedInvoiceForPayment(invoice);
-    setPaymentData({ amount: 0, paymentMethod: invoice.paymentMethod || '', paymentDate: new Date().toISOString().split('T')[0], notes: '' });
+    setPaymentData({
+      amount: 0,
+      paymentMethod: invoice.paymentMethod || '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    });
     setShowPaymentModal(true);
   };
 
   const closePaymentModal = () => {
     setShowPaymentModal(false);
     setSelectedInvoiceForPayment(null);
-    setPaymentData({ amount: 0, paymentMethod: '', paymentDate: new Date().toISOString().split('T')[0], notes: '' });
+    setPaymentData({
+      amount: 0,
+      paymentMethod: '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      notes: ''
+    });
   };
 
   const recordPartPayment = async () => {
     if (!selectedInvoiceForPayment) return;
+
     const paymentAmount = parseFloat(paymentData.amount);
-    if (paymentAmount <= 0) { showNotification('Payment amount must be greater than zero.', 'error'); return; }
-    if (!paymentData.paymentMethod.trim()) { showNotification('Payment method is required.', 'error'); return; }
+    if (paymentAmount <= 0) {
+      showNotification('Payment amount must be greater than zero.', 'error');
+      return;
+    }
+
+    if (!paymentData.paymentMethod.trim()) {
+      showNotification('Payment method is required.', 'error');
+      return;
+    }
+
     const currentBalance = selectedInvoiceForPayment.balance || (selectedInvoiceForPayment.total - selectedInvoiceForPayment.paid);
-    if (paymentAmount > currentBalance) { showNotification(`Payment amount cannot exceed the remaining balance of GHS ${currentBalance.toFixed(2)}.`, 'error'); return; }
+    if (paymentAmount > currentBalance) {
+      showNotification(`Payment amount cannot exceed the remaining balance of GHS ${currentBalance.toFixed(2)}.`, 'error');
+      return;
+    }
 
     const paymentEntry = {
       id: `pay-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -2079,13 +2063,21 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
         const newPaidAmount = (inv.paid || 0) + paymentAmount;
         const newBalance = inv.total - newPaidAmount;
         const newStatus = newBalance <= 0 ? 'PAID' : (newPaidAmount > 0 ? 'PENDING' : inv.status);
-        return { ...inv, paid: newPaidAmount, balance: newBalance, status: newStatus, paymentHistory: [...paymentHistory, paymentEntry] };
+
+        return {
+          ...inv,
+          paid: newPaidAmount,
+          balance: newBalance,
+          status: newStatus,
+          paymentHistory: [...paymentHistory, paymentEntry]
+        };
       }
       return inv;
     });
 
     const updatedInvoice = updatedInvoices.find(inv => inv.id === selectedInvoiceForPayment.id);
     await saveInvoiceToFirestore(updatedInvoice);
+
     setInvoices(updatedInvoices);
     generateReceipt(updatedInvoice, paymentEntry);
     closePaymentModal();
@@ -2094,15 +2086,32 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
   const getStats = () => {
     const totalRevenue = invoices.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
-    const totalPaid = invoices.reduce((sum, inv) => inv.status === 'PAID' ? sum + Number(inv.total || 0) : sum + Number(inv.paid || 0), 0);
-    const totalOutstanding = invoices.reduce((sum, inv) => inv.status === 'PAID' ? sum : sum + Number(inv.balance || 0), 0);
+
+    const totalPaid = invoices.reduce((sum, inv) => {
+      if (inv.status === 'PAID') return sum + Number(inv.total || 0);
+      return sum + Number(inv.paid || 0);
+    }, 0);
+
+    const totalOutstanding = invoices.reduce((sum, inv) => {
+      if (inv.status === 'PAID') return sum;
+      return sum + Number(inv.balance || 0);
+    }, 0);
+
     const paidInvoices = invoices.filter(inv => inv.status === 'PAID').length;
     const unpaidInvoices = invoices.filter(inv => inv.status !== 'PAID').length;
+
+    // This month stats
     const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
     const invoicesThisMonth = invoices.filter(inv => {
       const d = new Date(inv.invoiceDate);
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
     });
+    const countThisMonth = invoicesThisMonth.length;
+    const revenueThisMonth = invoicesThisMonth.reduce((sum, inv) => sum + Number(inv.total || 0), 0);
+
+    // Top 5 clients by revenue
     const clientMap = {};
     invoices.forEach(inv => {
       const name = inv.clientName || 'Unknown';
@@ -2110,22 +2119,37 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
       clientMap[name].count += 1;
       clientMap[name].total += Number(inv.total || 0);
     });
-    const topClients = Object.entries(clientMap).sort((a, b) => b[1].total - a[1].total).slice(0, 5);
-    return { totalRevenue, totalPaid, totalOutstanding, paidInvoices, unpaidInvoices, totalInvoices: invoices.length, topClients,
-      countThisMonth: invoicesThisMonth.length, revenueThisMonth: invoicesThisMonth.reduce((sum, inv) => sum + Number(inv.total || 0), 0) };
+    const topClients = Object.entries(clientMap)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 5);
+
+    return {
+      totalRevenue,
+      totalPaid,
+      totalOutstanding,
+      paidInvoices,
+      unpaidInvoices,
+      totalInvoices: invoices.length,
+      topClients,
+      countThisMonth,
+      revenueThisMonth
+    };
   };
 
   const stats = getStats();
-  const filteredInvoices = invoices.slice().reverse().filter(inv => {
-    if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
-    return (inv.invoiceNumber || '').toLowerCase().includes(q) || (inv.clientName || '').toLowerCase().includes(q);
-  });
 
-  // Derive validation state for live feedback
-  const hasValidService = invoiceData.services.some(s => s.desc.trim() !== '' && s.amount > 0);
-  const hasPaymentInfo = invoiceData.paymentMethod.trim() !== '' || invoiceData.paymentAccountNumber.trim() !== '' || invoiceData.paymentLink.trim() !== '';
-  const invoiceIsValid = invoiceData.clientName.trim() && hasValidService && hasPaymentInfo && calculateTotal() > 0;
+  // Filtered invoices for the table/cards
+  const filteredInvoices = invoices
+    .slice()
+    .reverse()
+    .filter(inv => {
+      if (!searchQuery.trim()) return true;
+      const q = searchQuery.toLowerCase();
+      return (
+        (inv.invoiceNumber || '').toLowerCase().includes(q) ||
+        (inv.clientName || '').toLowerCase().includes(q)
+      );
+    });
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20 md:pb-4">
@@ -2154,12 +2178,27 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
       {/* Notification */}
       {notification.show && (
         <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4 animate-slide-down">
-          <div className={`rounded-lg shadow-lg p-4 flex items-start gap-3 ${notification.type === 'success' ? 'bg-green-50 border border-green-200' : notification.type === 'error' ? 'bg-red-50 border border-red-200' : 'bg-blue-50 border border-blue-200'}`}>
+          <div className={`rounded-lg shadow-lg p-4 flex items-start gap-3 ${
+            notification.type === 'success' ? 'bg-green-50 border border-green-200' :
+            notification.type === 'error' ? 'bg-red-50 border border-red-200' :
+            'bg-blue-50 border border-blue-200'
+          }`}>
             {notification.type === 'success' && <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0 mt-0.5" />}
             {notification.type === 'error' && <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />}
             {notification.type === 'info' && <Info className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />}
-            <p className={`flex-1 text-sm ${notification.type === 'success' ? 'text-green-800' : notification.type === 'error' ? 'text-red-800' : 'text-blue-800'}`}>{notification.message}</p>
-            <button onClick={() => setNotification({ show: false, message: '', type: 'info' })} className="flex-shrink-0 text-gray-400 hover:text-gray-600"><X size={18} /></button>
+            <p className={`flex-1 text-sm ${
+              notification.type === 'success' ? 'text-green-800' :
+              notification.type === 'error' ? 'text-red-800' :
+              'text-blue-800'
+            }`}>
+              {notification.message}
+            </p>
+            <button
+              onClick={() => setNotification({ show: false, message: '', type: 'info' })}
+              className="flex-shrink-0 text-gray-400 hover:text-gray-600"
+            >
+              <X size={18} />
+            </button>
           </div>
         </div>
       )}
@@ -2167,10 +2206,20 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
       <div className="max-w-6xl mx-auto px-4 py-4 md:py-8">
         {/* Desktop Navigation */}
         <div className="no-print hidden md:flex mb-6 gap-4">
-          <button onClick={() => setCurrentView('create')} className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition ${currentView === 'create' ? 'bg-blue-500 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+          <button
+            onClick={() => setCurrentView('create')}
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition ${
+              currentView === 'create' ? 'bg-blue-500 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
             <FileText size={20} /> {editingInvoiceId ? 'Edit Invoice' : 'Create Invoice'}
           </button>
-          <button onClick={() => setCurrentView('stats')} className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition ${currentView === 'stats' ? 'bg-blue-500 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'}`}>
+          <button
+            onClick={() => setCurrentView('stats')}
+            className={`flex items-center justify-center gap-2 px-6 py-3 rounded-lg font-medium transition ${
+              currentView === 'stats' ? 'bg-blue-500 text-white shadow-md' : 'bg-white text-gray-700 hover:bg-gray-50'
+            }`}
+          >
             <BarChart3 size={20} /> Statistics
           </button>
         </div>
@@ -2178,11 +2227,23 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
         {/* Mobile Bottom Navigation */}
         <div className="no-print fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 shadow-lg md:hidden z-40">
           <div className="flex justify-around items-center h-16">
-            <button onClick={() => setCurrentView('create')} className={`flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-lg transition ${currentView === 'create' ? 'text-blue-500' : 'text-gray-600'}`}>
-              <FileText size={22} /><span className="text-xs font-medium">Create</span>
+            <button
+              onClick={() => setCurrentView('create')}
+              className={`flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-lg transition ${
+                currentView === 'create' ? 'text-blue-500' : 'text-gray-600'
+              }`}
+            >
+              <FileText size={22} />
+              <span className="text-xs font-medium">Create</span>
             </button>
-            <button onClick={() => setCurrentView('stats')} className={`flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-lg transition ${currentView === 'stats' ? 'text-blue-500' : 'text-gray-600'}`}>
-              <BarChart3 size={22} /><span className="text-xs font-medium">Stats</span>
+            <button
+              onClick={() => setCurrentView('stats')}
+              className={`flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-lg transition ${
+                currentView === 'stats' ? 'text-blue-500' : 'text-gray-600'
+              }`}
+            >
+              <BarChart3 size={22} />
+              <span className="text-xs font-medium">Stats</span>
             </button>
           </div>
         </div>
@@ -2190,39 +2251,74 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
         {/* ─── STATS VIEW ─── */}
         {currentView === 'stats' && (
           <div className="no-print bg-white p-4 md:p-6 rounded-lg shadow-sm mb-4">
+            {/* Stats Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-6 gap-3">
               <div>
                 <h2 className="text-xl md:text-2xl font-bold">Invoice Statistics</h2>
-                {lastRefreshed && <p className="text-xs text-gray-400 mt-0.5">{getLastRefreshedLabel()}</p>}
+                {lastRefreshed && (
+                  <p className="text-xs text-gray-400 mt-0.5">{getLastRefreshedLabel()}</p>
+                )}
               </div>
               <div className="flex gap-2 items-center">
-                <button onClick={() => exportToCSV(filteredInvoices)} className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 text-sm font-medium transition shadow-sm">
+                <button
+                  onClick={() => exportToCSV(filteredInvoices)}
+                  className="flex items-center gap-2 bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600 text-sm font-medium transition shadow-sm"
+                >
                   <Download size={16} /> Export CSV
                 </button>
-                <button onClick={() => refreshInvoices(userId, true)} disabled={isRefreshing} className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 text-sm font-medium transition shadow-sm disabled:opacity-60">
+                <button
+                  onClick={() => refreshInvoices(userId, true)}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600 text-sm font-medium transition shadow-sm disabled:opacity-60"
+                >
                   <RefreshCw size={16} className={isRefreshing ? 'spin' : ''} />
                   {isRefreshing ? 'Refreshing…' : 'Refresh'}
                 </button>
               </div>
             </div>
 
+            {/* Main stats grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 mb-6 md:mb-8">
-              <div className="bg-blue-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Total Revenue</div><div className="text-2xl md:text-3xl font-bold text-blue-600">GHS {stats.totalRevenue.toFixed(2)}</div></div>
-              <div className="bg-green-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Total Paid</div><div className="text-2xl md:text-3xl font-bold text-green-600">GHS {stats.totalPaid.toFixed(2)}</div></div>
-              <div className="bg-orange-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Outstanding</div><div className="text-2xl md:text-3xl font-bold text-orange-600">GHS {stats.totalOutstanding.toFixed(2)}</div></div>
+              <div className="bg-blue-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Total Revenue</div>
+                <div className="text-2xl md:text-3xl font-bold text-blue-600">GHS {stats.totalRevenue.toFixed(2)}</div>
+              </div>
+              <div className="bg-green-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Total Paid</div>
+                <div className="text-2xl md:text-3xl font-bold text-green-600">GHS {stats.totalPaid.toFixed(2)}</div>
+              </div>
+              <div className="bg-orange-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Outstanding</div>
+                <div className="text-2xl md:text-3xl font-bold text-orange-600">GHS {stats.totalOutstanding.toFixed(2)}</div>
+              </div>
             </div>
 
+            {/* Count stats */}
             <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-4 md:gap-6 mb-6 md:mb-8">
-              <div className="bg-gray-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Total Invoices</div><div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.totalInvoices}</div></div>
-              <div className="bg-gray-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Paid Invoices</div><div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.paidInvoices}</div></div>
-              <div className="bg-gray-50 p-4 md:p-6 rounded"><div className="text-xs md:text-sm text-gray-600 mb-2">Unpaid Invoices</div><div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.unpaidInvoices}</div></div>
+              <div className="bg-gray-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Total Invoices</div>
+                <div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.totalInvoices}</div>
+              </div>
+              <div className="bg-gray-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Paid Invoices</div>
+                <div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.paidInvoices}</div>
+              </div>
+              <div className="bg-gray-50 p-4 md:p-6 rounded">
+                <div className="text-xs md:text-sm text-gray-600 mb-2">Unpaid Invoices</div>
+                <div className="text-2xl md:text-3xl font-bold text-gray-700">{stats.unpaidInvoices}</div>
+              </div>
+              {/* This month */}
               <div className="bg-purple-50 p-4 md:p-6 rounded border border-purple-100">
-                <div className="flex items-center gap-1 text-xs md:text-sm text-purple-600 mb-2"><Calendar size={13} /><span>This Month</span></div>
+                <div className="flex items-center gap-1 text-xs md:text-sm text-purple-600 mb-2">
+                  <Calendar size={13} />
+                  <span>This Month</span>
+                </div>
                 <div className="text-xl md:text-2xl font-bold text-purple-700">{stats.countThisMonth} invoices</div>
                 <div className="text-sm font-semibold text-purple-500 mt-1">GHS {stats.revenueThisMonth.toFixed(2)}</div>
               </div>
             </div>
 
+            {/* Top Clients */}
             {stats.topClients.length > 0 && (
               <div className="mb-6 md:mb-8">
                 <h3 className="text-lg md:text-xl font-bold mb-3 md:mb-4">Top Clients by Revenue</h3>
@@ -2251,13 +2347,28 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
               </div>
             )}
 
+            {/* All Invoices + Search + Export */}
             <div>
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 md:mb-4 gap-3">
                 <h3 className="text-lg md:text-xl font-bold">All Invoices</h3>
+                {/* Search */}
                 <div className="relative w-full sm:w-64">
                   <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                  <input type="text" placeholder="Search by invoice # or client" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full pl-9 pr-4 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition" />
-                  {searchQuery && <button onClick={() => setSearchQuery('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"><X size={14} /></button>}
+                  <input
+                    type="text"
+                    placeholder="Search by invoice # or client"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2 border-2 border-gray-200 rounded-lg text-sm focus:border-blue-500 focus:outline-none transition"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <X size={14} />
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2271,21 +2382,49 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                         <div className="text-sm text-gray-600 mt-1">{inv.clientName || 'N/A'}</div>
                         <div className="text-xs text-gray-500 mt-1">{formatDate(inv.invoiceDate)}</div>
                       </div>
-                      <span className={`px-2 py-1 rounded text-xs font-medium ${inv.status === 'PAID' ? 'bg-green-100 text-green-800' : inv.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>{inv.status}</span>
+                      <span className={`px-2 py-1 rounded text-xs font-medium ${
+                        inv.status === 'PAID' ? 'bg-green-100 text-green-800' :
+                        inv.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                        'bg-orange-100 text-orange-800'
+                      }`}>
+                        {inv.status}
+                      </span>
                     </div>
                     <div className="grid grid-cols-2 gap-3 mb-3 text-sm">
-                      <div><div className="text-gray-600 text-xs">Total</div><div className="font-semibold text-gray-900">GHS {Number(inv.total).toFixed(2)}</div></div>
-                      <div><div className="text-gray-600 text-xs">Balance</div><div className="font-semibold text-gray-900">GHS {Number(inv.balance).toFixed(2)}</div></div>
+                      <div>
+                        <div className="text-gray-600 text-xs">Total</div>
+                        <div className="font-semibold text-gray-900">GHS {Number(inv.total).toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600 text-xs">Balance</div>
+                        <div className="font-semibold text-gray-900">GHS {Number(inv.balance).toFixed(2)}</div>
+                      </div>
                     </div>
                     <div className="flex gap-2 flex-wrap">
-                      <button onClick={() => editInvoice(inv)} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1"><Edit2 size={14} /> Edit</button>
-                      {inv.status !== 'PAID' && inv.balance > 0 && <button onClick={() => openPaymentModal(inv)} className="bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 transition text-xs font-medium flex items-center gap-1"><DollarSign size={14} /> Payment</button>}
-                      {(inv.status === 'PAID' || inv.paid > 0) && <button onClick={() => generateReceipt(inv)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1"><Receipt size={14} /> Receipt</button>}
-                      <button onClick={() => deleteInvoice(inv.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1"><Trash2 size={14} /> Delete</button>
+                      <button onClick={() => editInvoice(inv)} className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition text-xs font-medium flex items-center gap-1">
+                        <Edit2 size={14} /> Edit
+                      </button>
+                      {inv.status !== 'PAID' && inv.balance > 0 && (
+                        <button onClick={() => openPaymentModal(inv)} className="bg-yellow-500 text-white px-3 py-2 rounded-lg hover:bg-yellow-600 transition text-xs font-medium flex items-center gap-1">
+                          <DollarSign size={14} /> Payment
+                        </button>
+                      )}
+                      {(inv.status === 'PAID' || inv.paid > 0) && (
+                        <button onClick={() => generateReceipt(inv)} className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition text-xs font-medium flex items-center gap-1">
+                          <Receipt size={14} /> Receipt
+                        </button>
+                      )}
+                      <button onClick={() => deleteInvoice(inv.id)} className="bg-red-500 text-white px-3 py-2 rounded-lg hover:bg-red-600 transition text-xs font-medium flex items-center gap-1">
+                        <Trash2 size={14} /> Delete
+                      </button>
                     </div>
                   </div>
                 ))}
-                {filteredInvoices.length === 0 && <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-gray-200">{searchQuery ? 'No invoices match your search.' : 'No invoices found. Create your first invoice to get started!'}</div>}
+                {filteredInvoices.length === 0 && (
+                  <div className="text-center py-8 text-gray-500 bg-white rounded-lg border border-gray-200">
+                    {searchQuery ? 'No invoices match your search.' : 'No invoices found. Create your first invoice to get started!'}
+                  </div>
+                )}
               </div>
 
               {/* Desktop Table */}
@@ -2311,24 +2450,55 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                         <td className="text-right p-3 md:p-4 text-sm md:text-base">GHS {Number(inv.total).toFixed(2)}</td>
                         <td className="text-right p-3 md:p-4 text-sm md:text-base">GHS {Number(inv.balance).toFixed(2)}</td>
                         <td className="text-center p-3 md:p-4">
-                          <span className={`px-2 md:px-3 py-1 rounded text-xs md:text-sm ${inv.status === 'PAID' ? 'bg-green-100 text-green-800' : inv.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' : 'bg-orange-100 text-orange-800'}`}>{inv.status}</span>
+                          <span className={`px-2 md:px-3 py-1 rounded text-xs md:text-sm ${
+                            inv.status === 'PAID' ? 'bg-green-100 text-green-800' :
+                            inv.status === 'PENDING' ? 'bg-yellow-100 text-yellow-800' :
+                            'bg-orange-100 text-orange-800'
+                          }`}>
+                            {inv.status}
+                          </span>
                         </td>
                         <td className="text-center p-3 md:p-4">
                           <div className="flex gap-2 justify-center flex-wrap">
-                            <button onClick={() => editInvoice(inv)} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit Invoice"><Edit2 size={18} /></button>
-                            {inv.status !== 'PAID' && inv.balance > 0 && <button onClick={() => openPaymentModal(inv)} className="bg-yellow-500 text-white p-2.5 rounded-lg hover:bg-yellow-600 transition shadow-sm" title="Record Part Payment"><DollarSign size={18} /></button>}
-                            {(inv.status === 'PAID' || inv.paid > 0) && <button onClick={() => generateReceipt(inv)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title="Generate Receipt"><Receipt size={18} /></button>}
-                            {inv.paymentHistory && inv.paymentHistory.length > 0 && (
-                              <button onClick={() => { const last = inv.paymentHistory[inv.paymentHistory.length - 1]; generateReceipt(inv, last); }} className="bg-purple-500 text-white p-2.5 rounded-lg hover:bg-purple-600 transition shadow-sm" title="Generate Last Payment Receipt"><Receipt size={18} /></button>
+                            <button onClick={() => editInvoice(inv)} className="bg-blue-500 text-white p-2.5 rounded-lg hover:bg-blue-600 transition shadow-sm" title="Edit Invoice">
+                              <Edit2 size={18} />
+                            </button>
+                            {inv.status !== 'PAID' && inv.balance > 0 && (
+                              <button onClick={() => openPaymentModal(inv)} className="bg-yellow-500 text-white p-2.5 rounded-lg hover:bg-yellow-600 transition shadow-sm" title="Record Part Payment">
+                                <DollarSign size={18} />
+                              </button>
                             )}
-                            <button onClick={() => deleteInvoice(inv.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete Invoice"><Trash2 size={18} /></button>
+                            {(inv.status === 'PAID' || inv.paid > 0) && (
+                              <button onClick={() => generateReceipt(inv)} className="bg-green-500 text-white p-2.5 rounded-lg hover:bg-green-600 transition shadow-sm" title={inv.status === 'PAID' ? 'Generate Full Receipt' : 'Generate Payment Summary Receipt'}>
+                                <Receipt size={18} />
+                              </button>
+                            )}
+                            {inv.paymentHistory && inv.paymentHistory.length > 0 && (
+                              <button
+                                onClick={() => {
+                                  const lastPayment = inv.paymentHistory[inv.paymentHistory.length - 1];
+                                  generateReceipt(inv, lastPayment);
+                                }}
+                                className="bg-purple-500 text-white p-2.5 rounded-lg hover:bg-purple-600 transition shadow-sm"
+                                title="Generate Last Payment Receipt"
+                              >
+                                <Receipt size={18} />
+                              </button>
+                            )}
+                            <button onClick={() => deleteInvoice(inv.id)} className="bg-red-500 text-white p-2.5 rounded-lg hover:bg-red-600 transition shadow-sm" title="Delete Invoice">
+                              <Trash2 size={18} />
+                            </button>
                           </div>
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-                {filteredInvoices.length === 0 && <div className="text-center py-8 text-gray-500">{searchQuery ? 'No invoices match your search.' : 'No invoices found. Create your first invoice to get started!'}</div>}
+                {filteredInvoices.length === 0 && (
+                  <div className="text-center py-8 text-gray-500">
+                    {searchQuery ? 'No invoices match your search.' : 'No invoices found. Create your first invoice to get started!'}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -2340,7 +2510,9 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
             <div className="no-print mb-4 bg-white p-4 md:p-6 rounded-lg shadow-sm">
               <div className="flex flex-col md:flex-row md:justify-between md:items-center mb-6 gap-3">
                 <div>
-                  <h1 className="text-xl md:text-2xl font-bold text-gray-900">{editingInvoiceId ? 'Edit Invoice' : 'New Invoice'}</h1>
+                  <h1 className="text-xl md:text-2xl font-bold text-gray-900">
+                    {editingInvoiceId ? 'Edit Invoice' : 'New Invoice'}
+                  </h1>
                   <p className="text-sm text-gray-500 mt-1">{invoiceData.invoiceNumber}</p>
                 </div>
                 {editingInvoiceId && (
@@ -2353,8 +2525,8 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
               <div className="space-y-4 mb-6">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">Client Name <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="Client Name" value={invoiceData.clientName} onChange={(e) => setInvoiceData({ ...invoiceData, clientName: e.target.value })} className={`w-full border-2 px-4 py-3 rounded-lg text-base focus:outline-none transition ${!invoiceData.clientName.trim() ? 'border-red-200 focus:border-red-400' : 'border-gray-300 focus:border-blue-500'}`} />
+                    <label className="block text-sm font-medium mb-2 text-gray-700">Client Name *</label>
+                    <input type="text" placeholder="Client Name" value={invoiceData.clientName} onChange={(e) => setInvoiceData({ ...invoiceData, clientName: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
                   </div>
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700">Invoice Date</label>
@@ -2369,16 +2541,18 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                     </select>
                   </div>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700">Client Address (optional)</label>
                     <input type="text" placeholder="Address, City" value={`${invoiceData.clientAddress}${invoiceData.clientAddress && invoiceData.clientCity ? ', ' : ''}${invoiceData.clientCity}`} onChange={(e) => { const parts = e.target.value.split(',').map(s => s.trim()); setInvoiceData({ ...invoiceData, clientAddress: parts[0] || '', clientCity: parts.slice(1).join(', ') || '' }); }} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method <span className="text-red-500">*</span></label>
-                    <input type="text" placeholder="e.g., Mobile Money, Bank Transfer" value={invoiceData.paymentMethod} onChange={(e) => setInvoiceData({ ...invoiceData, paymentMethod: e.target.value })} className={`w-full border-2 px-4 py-3 rounded-lg text-base focus:outline-none transition ${!invoiceData.paymentMethod.trim() && !invoiceData.paymentAccountNumber.trim() ? 'border-red-200 focus:border-red-400' : 'border-gray-300 focus:border-blue-500'}`} />
+                    <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method *</label>
+                    <input type="text" placeholder="e.g., Mobile Money, Bank Transfer" value={invoiceData.paymentMethod} onChange={(e) => setInvoiceData({ ...invoiceData, paymentMethod: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" />
                   </div>
                 </div>
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-2 text-gray-700">Payment Account</label>
@@ -2393,9 +2567,12 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 
               <div className="mb-6">
                 <div className="flex justify-between items-center mb-4">
-                  <h3 className="font-semibold text-lg text-gray-900">Services <span className="text-red-500">*</span></h3>
-                  <button onClick={addService} className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 text-sm font-medium transition shadow-sm"><Plus size={18} /> Add Service</button>
+                  <h3 className="font-semibold text-lg text-gray-900">Services</h3>
+                  <button onClick={addService} className="flex items-center gap-2 bg-blue-500 text-white px-4 py-2.5 rounded-lg hover:bg-blue-600 text-sm font-medium transition shadow-sm">
+                    <Plus size={18} /> Add Service
+                  </button>
                 </div>
+
                 <div className="space-y-3">
                   {invoiceData.services.map((service, index) => (
                     <div key={index} className="flex flex-col md:flex-row gap-2 items-start md:items-center bg-gray-50 p-3 md:p-4 rounded-lg border border-gray-200">
@@ -2403,52 +2580,55 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                       <div className="flex gap-2 w-full md:w-auto items-center flex-wrap">
                         <input type="number" placeholder="Rate" value={service.unitRate || ''} onChange={(e) => updateService(index, 'unitRate', parseFloat(e.target.value) || 0)} className="w-20 md:w-24 border-2 border-gray-300 px-2 md:px-3 py-2.5 rounded-lg text-sm md:text-base focus:border-blue-500 focus:outline-none transition" />
                         <input type="number" placeholder="Qty" value={service.count || ''} onChange={(e) => updateService(index, 'count', parseInt(e.target.value) || 0)} className="w-16 md:w-20 border-2 border-gray-300 px-2 md:px-3 py-2.5 rounded-lg text-sm md:text-base focus:border-blue-500 focus:outline-none transition" />
-                        <div className="flex-1 md:flex-none md:w-28 px-2 md:px-3 py-2.5 text-sm md:text-base text-gray-700 font-semibold bg-white rounded-lg border-2 border-gray-300 flex items-center min-w-[80px]">GHS {service.amount.toFixed(2)}</div>
-                        <button onClick={() => removeService(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 md:p-2.5 rounded-lg transition flex-shrink-0"><Trash2 size={18} /></button>
+                        <div className="flex-1 md:flex-none md:w-28 px-2 md:px-3 py-2.5 text-sm md:text-base text-gray-700 font-semibold bg-white rounded-lg border-2 border-gray-300 flex items-center min-w-[80px]">
+                          GHS {service.amount.toFixed(2)}
+                        </div>
+                        <button onClick={() => removeService(index)} className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 md:p-2.5 rounded-lg transition flex-shrink-0" title="Remove service">
+                          <Trash2 size={18} />
+                        </button>
                       </div>
                     </div>
                   ))}
                 </div>
-                {!hasValidService && (
-                  <p className="text-xs text-amber-600 mt-2 flex items-center gap-1">
-                    <AlertCircle size={12} /> Add at least one service with a description and a rate greater than zero.
-                  </p>
-                )}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                <div><label className="block text-sm font-medium text-gray-700 mb-2">Discount</label><input type="number" value={invoiceData.discount} onChange={(e) => setInvoiceData({ ...invoiceData, discount: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-2">Tax</label><input type="number" value={invoiceData.tax} onChange={(e) => setInvoiceData({ ...invoiceData, tax: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" /></div>
-                <div><label className="block text-sm font-medium text-gray-700 mb-2">Paid</label><input type="number" value={invoiceData.paid} onChange={(e) => setInvoiceData({ ...invoiceData, paid: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" /></div>
-              </div>
-
-              {/* Live total display */}
-              <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-lg flex flex-wrap gap-4 text-sm">
-                <div><span className="text-gray-500">Subtotal: </span><span className="font-semibold">GHS {calculateSubtotal().toFixed(2)}</span></div>
-                <div><span className="text-gray-500">Total: </span><span className="font-bold text-blue-700">GHS {calculateTotal().toFixed(2)}</span></div>
-                <div><span className="text-gray-500">Balance: </span><span className={`font-bold ${calculateBalance() > 0 ? 'text-orange-600' : 'text-green-600'}`}>GHS {calculateBalance().toFixed(2)}</span></div>
-              </div>
-
-              {/* Validation summary for invoice */}
-              {!invoiceIsValid && (
-                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2">
-                  <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
-                  <div className="text-sm text-amber-800">
-                    <span className="font-semibold">Complete these before saving or exporting: </span>
-                    {!invoiceData.clientName.trim() && <span>Client name · </span>}
-                    {!hasValidService && <span>At least one service with a rate · </span>}
-                    {!hasPaymentInfo && <span>Payment method or account number · </span>}
-                    {calculateTotal() <= 0 && <span>Total must be &gt; 0</span>}
-                  </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Discount</label>
+                  <input type="number" value={invoiceData.discount} onChange={(e) => setInvoiceData({ ...invoiceData, discount: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" />
                 </div>
-              )}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Tax</label>
+                  <input type="number" value={invoiceData.tax} onChange={(e) => setInvoiceData({ ...invoiceData, tax: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Paid</label>
+                  <input type="number" value={invoiceData.paid} onChange={(e) => setInvoiceData({ ...invoiceData, paid: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-2.5 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="0" />
+                </div>
+              </div>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <button onClick={saveInvoice} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">{editingInvoiceId ? 'Update Invoice' : 'Save Invoice'}</button>
-                <button onClick={exportToPDF} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm"><Download size={20} /> Export to PDF</button>
+                <button onClick={saveInvoice} className="flex-1 bg-blue-500 text-white py-3.5 rounded-lg hover:bg-blue-600 text-base font-medium transition shadow-sm">
+                  {editingInvoiceId ? 'Update Invoice' : 'Save Invoice'}
+                </button>
+                <button onClick={exportToPDF} className="flex-1 bg-green-500 text-white py-3.5 rounded-lg hover:bg-green-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
+                  <Download size={20} /> Export to PDF
+                </button>
                 {(invoiceData.status === 'PAID' || invoiceData.paid > 0) && (
-                  <button onClick={() => { const cur = { ...invoiceData, subtotal: calculateSubtotal(), netSales: calculateNetSales(), total: calculateTotal(), balance: calculateBalance(), paymentHistory: invoiceData.paymentHistory || [] }; generateReceipt(cur); }}
-                    className="flex-1 bg-purple-500 text-white py-3.5 rounded-lg hover:bg-purple-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm">
+                  <button
+                    onClick={() => {
+                      const currentInvoice = {
+                        ...invoiceData,
+                        subtotal: calculateSubtotal(),
+                        netSales: calculateNetSales(),
+                        total: calculateTotal(),
+                        balance: calculateBalance(),
+                        paymentHistory: invoiceData.paymentHistory || []
+                      };
+                      generateReceipt(currentInvoice);
+                    }}
+                    className="flex-1 bg-purple-500 text-white py-3.5 rounded-lg hover:bg-purple-600 flex items-center justify-center gap-2 text-base font-medium transition shadow-sm"
+                  >
                     <Receipt size={20} /> Generate Receipt
                   </button>
                 )}
@@ -2459,7 +2639,6 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
             <div className="print-area bg-white p-4 md:p-12 invoice-font text-xs md:text-sm">
               <div className="flex flex-col md:flex-row md:justify-between mb-6 md:mb-8 gap-4">
                 <div>
-                  <img src={logoUrl} alt="CGY" style={{ height: 40, width: "auto", objectFit: "contain", marginBottom: 8 }} />
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyName}</div>
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyAddress}</div>
                   <div className="mb-1 text-xs md:text-sm">{invoiceData.companyCity}</div>
@@ -2470,6 +2649,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                   <div>Invoice Date: {formatDate(invoiceData.invoiceDate)}</div>
                 </div>
               </div>
+
               <div className="mb-6 md:mb-8 text-xs md:text-sm">
                 <div className="mb-2 font-semibold">Billed To:</div>
                 <div>{invoiceData.clientName}</div>
@@ -2478,15 +2658,25 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                 {invoiceData.clientPO && <div>P.O. No.  {invoiceData.clientPO}</div>}
                 {invoiceData.clientVAT && <div>VAT ID {invoiceData.clientVAT}</div>}
               </div>
+
               <div className="mb-6 md:mb-8 text-xs md:text-sm">
                 {invoiceData.orderNo && <div>Order No.:     {invoiceData.orderNo}</div>}
                 {invoiceData.checkoutNo && <div>Checkout No.: {invoiceData.checkoutNo}</div>}
                 <div>Purchase Date: {formatDate(invoiceData.purchaseDate)}</div>
               </div>
+
               <div className="mb-6 md:mb-8">
                 <div className="text-center mb-3 md:mb-4 text-xs md:text-sm">Order {invoiceData.orderNo}</div>
                 <table className="w-full text-xs md:text-sm">
-                  <thead><tr className="border-b border-black"><th className="text-left py-1 md:py-2">#</th><th className="text-left py-1 md:py-2">Services</th><th className="text-right py-1 md:py-2">Unit Rate</th><th className="text-right py-1 md:py-2">Count</th><th className="text-right py-1 md:py-2">Subtotal (GHS)</th></tr></thead>
+                  <thead>
+                    <tr className="border-b border-black">
+                      <th className="text-left py-1 md:py-2">#</th>
+                      <th className="text-left py-1 md:py-2">Services</th>
+                      <th className="text-right py-1 md:py-2">Unit Rate</th>
+                      <th className="text-right py-1 md:py-2">Count</th>
+                      <th className="text-right py-1 md:py-2">Subtotal (GHS)</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {invoiceData.services.map((service, index) => (
                       <tr key={index} className="border-b border-gray-300">
@@ -2500,6 +2690,7 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                   </tbody>
                 </table>
               </div>
+
               <div className="flex justify-end mb-6 md:mb-8">
                 <div className="w-full md:w-64 text-xs md:text-sm">
                   <div className="flex justify-between border-b py-1"><span>Subtotal</span><span>{calculateSubtotal().toFixed(2)}</span></div>
@@ -2509,22 +2700,47 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                   <div className="flex justify-between border-b-2 border-double border-black py-2 font-bold"><span>Total</span><span>{calculateTotal().toFixed(2)}</span></div>
                 </div>
               </div>
-              <div className="text-center mb-6 md:mb-8 border-b-2 border-double border-black pb-3 md:pb-4 text-xs md:text-sm">Invoice Status: {invoiceData.status}</div>
+
+              <div className="text-center mb-6 md:mb-8 border-b-2 border-double border-black pb-3 md:pb-4 text-xs md:text-sm">
+                Invoice Status: {invoiceData.status}
+              </div>
+
               <div className="flex justify-end mb-6 md:mb-8">
                 <div className="w-full md:w-64 text-xs md:text-sm">
                   <div className="flex justify-between border-b py-1"><span>Paid</span><span>-{invoiceData.paid.toFixed(2)}</span></div>
                   <div className="flex justify-between py-1"><span>Balance</span><span>{calculateBalance().toFixed(2)}</span></div>
                 </div>
               </div>
-              {invoiceData.paymentMethod && <div className="mb-6 md:mb-8 text-xs md:text-sm">Payment Method: {invoiceData.paymentMethod}</div>}
+
+              {invoiceData.paymentMethod && (
+                <div className="mb-6 md:mb-8 text-xs md:text-sm">
+                  Payment Method: {invoiceData.paymentMethod}
+                </div>
+              )}
+
               {(invoiceData.paymentAccountNumber || invoiceData.paymentLink) && (
                 <div className="mb-6 md:mb-8 text-xs md:text-sm">
                   <div className="font-bold mb-2">Payment Information:</div>
-                  {invoiceData.paymentAccountNumber && (<><div>Account #: {invoiceData.paymentAccountNumber}</div>{invoiceData.paymentInstitution && <div>Institution: {invoiceData.paymentInstitution}</div>}{invoiceData.paymentBeneficiary && <div>Beneficiary: {invoiceData.paymentBeneficiary}</div>}</>)}
-                  {invoiceData.paymentLink && (<div className="mt-2"><div>or use the link below to pay:</div><div className="text-blue-600 underline break-all">{invoiceData.paymentLink}</div></div>)}
+                  {invoiceData.paymentAccountNumber && (
+                    <>
+                      <div>Account #: {invoiceData.paymentAccountNumber}</div>
+                      {invoiceData.paymentInstitution && <div>Institution: {invoiceData.paymentInstitution}</div>}
+                      {invoiceData.paymentBeneficiary && <div>Beneficiary: {invoiceData.paymentBeneficiary}</div>}
+                    </>
+                  )}
+                  {invoiceData.paymentLink && (
+                    <div className="mt-2">
+                      <div>or use the link below to pay:</div>
+                      <div className="text-blue-600 underline break-all">{invoiceData.paymentLink}</div>
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="text-center text-xs md:text-sm"><div className="mb-2">***</div><div>Thank you for your business.</div></div>
+
+              <div className="text-center text-xs md:text-sm">
+                <div className="mb-2">***</div>
+                <div>Thank you for your business.</div>
+              </div>
             </div>
           </>
         )}
@@ -2537,20 +2753,24 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                 <h2 className="text-xl font-bold">Record Part Payment</h2>
                 <button onClick={closePaymentModal} className="text-gray-500 hover:text-gray-700"><X size={24} /></button>
               </div>
+
               <div className="mb-4 p-3 bg-gray-50 rounded">
                 <div className="text-sm text-gray-600 mb-1">Invoice: {selectedInvoiceForPayment.invoiceNumber}</div>
                 <div className="text-sm text-gray-600 mb-1">Client: {selectedInvoiceForPayment.clientName}</div>
                 <div className="text-sm font-semibold">Total: GHS {selectedInvoiceForPayment.total.toFixed(2)}</div>
                 <div className="text-sm font-semibold">Paid: GHS {(selectedInvoiceForPayment.paid || 0).toFixed(2)}</div>
-                <div className="text-sm font-semibold text-orange-600">Balance: GHS {(selectedInvoiceForPayment.balance || (selectedInvoiceForPayment.total - (selectedInvoiceForPayment.paid || 0))).toFixed(2)}</div>
+                <div className="text-sm font-semibold text-orange-600">
+                  Balance: GHS {(selectedInvoiceForPayment.balance || (selectedInvoiceForPayment.total - (selectedInvoiceForPayment.paid || 0))).toFixed(2)}
+                </div>
               </div>
+
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Payment Amount (GHS)</label>
                   <input type="number" step="0.01" min="0.01" max={selectedInvoiceForPayment.balance || (selectedInvoiceForPayment.total - (selectedInvoiceForPayment.paid || 0))} value={paymentData.amount} onChange={(e) => setPaymentData({ ...paymentData, amount: parseFloat(e.target.value) || 0 })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="Enter payment amount" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method <span className="text-red-500">*</span></label>
+                  <label className="block text-sm font-medium mb-2 text-gray-700">Payment Method</label>
                   <input type="text" value={paymentData.paymentMethod} onChange={(e) => setPaymentData({ ...paymentData, paymentMethod: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" placeholder="e.g., Mobile Money, Bank Transfer, Cash" />
                 </div>
                 <div>
@@ -2562,9 +2782,12 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
                   <textarea value={paymentData.notes} onChange={(e) => setPaymentData({ ...paymentData, notes: e.target.value })} className="w-full border-2 border-gray-300 px-4 py-3 rounded-lg text-base focus:border-blue-500 focus:outline-none transition" rows="3" placeholder="Additional notes about this payment" />
                 </div>
               </div>
+
               <div className="flex flex-col sm:flex-row gap-3 mt-6">
                 <button onClick={closePaymentModal} className="flex-1 bg-gray-500 text-white py-3 rounded-lg hover:bg-gray-600 font-medium transition shadow-sm">Cancel</button>
-                <button onClick={recordPartPayment} className="flex-1 bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2 font-medium transition shadow-sm"><Receipt size={18} /> Record Payment & Generate Receipt</button>
+                <button onClick={recordPartPayment} className="flex-1 bg-blue-500 text-white py-3 rounded-lg hover:bg-blue-600 flex items-center justify-center gap-2 font-medium transition shadow-sm">
+                  <Receipt size={18} /> Record Payment & Generate Receipt
+                </button>
               </div>
             </div>
           </div>
@@ -2577,8 +2800,11 @@ const InvoiceGenerator = ({ userId = '', onLogout }) => {
 /* ─── LoginScreen — rendered by App when unauthenticated ─── */
 function LoginScreen() {
   const handleGoogleLogin = async () => {
-    try { await signInWithGoogle(); }
-    catch (error) { console.error('Google login error:', error); }
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.error('Google login error:', error);
+    }
   };
 
   return (
@@ -2588,7 +2814,10 @@ function LoginScreen() {
           <img src={logo} alt="Curio Graphics Yard Logo" className="mx-auto mb-6 w-24 h-auto" />
           <h1 className="text-2xl font-semibold text-gray-900 mb-1">CoreOps Console v1.5</h1>
         </div>
-        <button onClick={handleGoogleLogin} className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-3 font-medium transition-colors">
+        <button
+          onClick={handleGoogleLogin}
+          className="w-full bg-white border border-gray-300 text-gray-700 py-3 px-4 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-3 font-medium transition-colors"
+        >
           <svg className="w-5 h-5" viewBox="0 0 24 24">
             <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
             <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
@@ -2616,16 +2845,25 @@ function App() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) { setAuthState({ status: 'authenticated', userId: user.uid, userEmail: user.email }); }
-      else { setAuthState({ status: 'unauthenticated', userId: '', userEmail: '' }); setMode('invoice'); }
+      if (user) {
+        setAuthState({ status: 'authenticated', userId: user.uid, userEmail: user.email });
+      } else {
+        setAuthState({ status: 'unauthenticated', userId: '', userEmail: '' });
+        setMode('invoice');
+      }
     });
     return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
-    try { await logout(); } catch (e) { console.error(e); }
+    try {
+      await logout();
+    } catch (e) {
+      console.error(e);
+    }
   };
 
+  // Spinner while Firebase figures out auth on startup — prevents double-mount
   if (authState.status === 'loading') {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -2637,18 +2875,39 @@ function App() {
     );
   }
 
-  if (authState.status === 'unauthenticated') return <LoginScreen />;
+  if (authState.status === 'unauthenticated') {
+    return <LoginScreen />;
+  }
 
   return (
     <div className="app-root">
       <header className="app-switcher-header no-print">
+        {/* Row 1: Logo + Logout */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 50 }}>
           <img src={logo} alt="CGY" className="app-switcher-logo" style={{ margin: 0 }} />
-          <button type="button" onClick={handleLogout}
-            style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 8, border: "1.5px solid #fee2e2", background: "transparent", color: "#ef4444", fontSize: 13, fontWeight: 600, cursor: "pointer", flexShrink: 0 }}>
-            <LogOut size={15} /><span>Logout</span>
+          <button
+            type="button"
+            onClick={handleLogout}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 12px",
+              borderRadius: 8,
+              border: "1.5px solid #fee2e2",
+              background: "transparent",
+              color: "#ef4444",
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: "pointer",
+              flexShrink: 0,
+            }}
+          >
+            <LogOut size={15} />
+            <span>Logout</span>
           </button>
         </div>
+        {/* Row 2: Mode switcher — full-width */}
         <div style={{ display: "flex", alignItems: "center", paddingBottom: 8 }}>
           <ModeSwitcher mode={mode} onModeChange={setMode} fullWidth />
         </div>
@@ -2666,11 +2925,32 @@ function App() {
       </main>
 
       {/* Scroll to top button */}
-      <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="no-print"
-        style={{ position: 'fixed', bottom: 80, right: 16, width: 44, height: 44, borderRadius: '50%', background: '#3b82f6', color: '#fff', border: 'none', boxShadow: '0 2px 10px rgba(0,0,0,0.2)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50,
-          opacity: showScrollTop ? 1 : 0, pointerEvents: showScrollTop ? 'auto' : 'none',
-          transform: showScrollTop ? 'translateY(0)' : 'translateY(12px)', transition: 'opacity 0.25s ease, transform 0.25s ease' }}
-        aria-label="Scroll to top">
+      <button
+        onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+        className="no-print"
+        style={{
+          position: 'fixed',
+          bottom: 80,
+          right: 16,
+          width: 44,
+          height: 44,
+          borderRadius: '50%',
+          background: '#3b82f6',
+          color: '#fff',
+          border: 'none',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.2)',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 50,
+          opacity: showScrollTop ? 1 : 0,
+          pointerEvents: showScrollTop ? 'auto' : 'none',
+          transform: showScrollTop ? 'translateY(0)' : 'translateY(12px)',
+          transition: 'opacity 0.25s ease, transform 0.25s ease',
+        }}
+        aria-label="Scroll to top"
+      >
         <ChevronUp size={22} />
       </button>
     </div>
