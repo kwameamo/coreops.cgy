@@ -49,19 +49,19 @@ const getBase64Sign = () => {
    CONTRACT TEMPLATES
 ───────────────────────────────────────────── */
 const GRAPHIC_DESIGN_SERVICES = [
-  { label: "Logo Design", ghsMin: 650, ghsMax: 1800, usdMin: 60, usdMax: 165 },
-  { label: "Full Brand Identity (Brand Guide + Assets)", ghsMin: 2500, ghsMax: 6000, usdMin: 200, usdMax: 650 },
-  { label: "Flyer / Poster", ghsMin: 250, ghsMax: 650, usdMin: 30, usdMax: 60 },
-  { label: "Social Media Content Pack (10 posts)", ghsMin: 550, ghsMax: 1200, usdMin: 50, usdMax: 110 },
-  { label: "Business Card Design", ghsMin: 200, ghsMax: 400, usdMin: 20, usdMax: 40 },
-  { label: "Packaging Design", ghsMin: 700, ghsMax: 2500, usdMin: 65, usdMax: 230 },
+  { label: "Logo Design", ghsMin: 700, ghsMax: 2000, usdMin: 60, usdMax: 200 },
+  { label: "Full Brand Identity (Brand Guide + Assets)", ghsMin: 2500, ghsMax: 10000, usdMin: 200, usdMax: 1000 },
+  { label: "Flyer / Poster", ghsMin: 250, ghsMax: 650, usdMin: 50, usdMax: 100 },
+  { label: "Social Media Content Pack (10 posts)", ghsMin: 1000, ghsMax: 2500, usdMin: 100, usdMax: 250 },
+  { label: "Business Card Design", ghsMin: 200, ghsMax: 500, usdMin: 20, usdMax: 50 },
+  { label: "Packaging Design", ghsMin: 1000, ghsMax: 2500, usdMin: 100, usdMax: 250 },
 ];
 
 const MERCH_DESIGN_SERVICES = [
-  { label: "Apparel Graphic / Clothing Design", ghsMin: 400, ghsMax: 900, usdMin: 40, usdMax: 80 },
-  { label: "Full Clothing Line Concept (5–10 pieces)", ghsMin: 2000, ghsMax: 4500, usdMin: 200, usdMax: 450 },
-  { label: "Tech Packs (Production Ready)", ghsMin: 700, ghsMax: 2000, usdMin: 65, usdMax: 200 },
-  { label: "Brand Campaign Posters", ghsMin: 300, ghsMax: 750, usdMin: 30, usdMax: 80 },
+  { label: "Apparel Graphic / Clothing Design", ghsMin: 500, ghsMax: 1500, usdMin: 50, usdMax: 150 },
+  { label: "Full Clothing Line Concept (5–10 pieces)", ghsMin: 2500, ghsMax: 5000, usdMin: 250, usdMax: 500 },
+  { label: "Tech Packs (Production Ready)", ghsMin: 1000, ghsMax: 2000, usdMin: 100, usdMax: 250 },
+  { label: "Brand Campaign Posters", ghsMin: 300, ghsMax: 1000, usdMin: 50, usdMax: 100 },
 ];
 
 const CONTRACT_STATUSES = ["DRAFT", "SENT", "SIGNED", "ACTIVE", "COMPLETED", "CANCELLED"];
